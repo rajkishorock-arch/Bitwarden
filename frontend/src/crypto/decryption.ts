@@ -7,6 +7,13 @@ import type { EncryptedEnvelope } from './crypto.types';
 import { base64ToBytes } from './nonce';
 import { DecryptionError, UnsupportedVersionError } from './crypto.errors';
 
+function getCrypto(): Crypto {
+  if (typeof window !== 'undefined' && window.crypto) {
+    return window.crypto;
+  }
+  return globalThis.crypto;
+}
+
 export async function decryptVaultPayload<T>(
   envelope: EncryptedEnvelope,
   key: CryptoKey
@@ -19,7 +26,7 @@ export async function decryptVaultPayload<T>(
     const ivBytes = base64ToBytes(envelope.iv);
     const ciphertextBytes = base64ToBytes(envelope.ciphertext);
 
-    const decryptedBuffer = await window.crypto.subtle.decrypt(
+    const decryptedBuffer = await getCrypto().subtle.decrypt(
       {
         name: 'AES-GCM',
         iv: ivBytes as BufferSource,
@@ -38,11 +45,4 @@ export async function decryptVaultPayload<T>(
     }
     throw new DecryptionError('Unable to decrypt payload. Master encryption key mismatch or corrupted ciphertext.');
   }
-}
-
-export async function decryptString(
-  envelope: EncryptedEnvelope,
-  key: CryptoKey
-): Promise<string> {
-  return decryptVaultPayload<string>(envelope, key);
 }

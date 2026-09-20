@@ -43,8 +43,7 @@ async def create_vault_item(
     item = VaultItem(
         user_id=current_user.id,
         item_type=item_in.item_type,
-        title_encrypted=item_in.title_encrypted,
-        payload_encrypted=item_in.payload_encrypted,
+        encrypted_payload=item_in.encrypted_payload,
         nonce=item_in.nonce,
         is_favorite=item_in.is_favorite,
         tags=associated_tags
@@ -95,10 +94,8 @@ async def update_vault_item(
 
     if item_in.item_type is not None:
         item.item_type = item_in.item_type
-    if item_in.title_encrypted is not None:
-        item.title_encrypted = item_in.title_encrypted
-    if item_in.payload_encrypted is not None:
-        item.payload_encrypted = item_in.payload_encrypted
+    if item_in.encrypted_payload is not None:
+        item.encrypted_payload = item_in.encrypted_payload
     if item_in.nonce is not None:
         item.nonce = item_in.nonce
     if item_in.is_favorite is not None:

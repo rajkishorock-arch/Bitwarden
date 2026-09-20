@@ -26,11 +26,10 @@ async def test_vault_crud_flow_and_user_isolation():
         token_a = login_a.cookies.get("access_token")
         csrf_a = login_a.cookies.get("csrf_token")
 
-        # 2. User A Creates Encrypted Vault Item
+        # 2. User A Creates Encrypted Vault Item with Single Encrypted Envelope
         item_payload = {
             "item_type": "login",
-            "title_encrypted": "U2FsdGVkX19TITLE==",
-            "payload_encrypted": "U2FsdGVkX19PAYLOAD==",
+            "encrypted_payload": "U2FsdGVkX19SINGLE_ENVELOPE_CIPHERTEXT==",
             "nonce": "NONCE1234567890==",
             "is_favorite": True
         }
@@ -43,7 +42,7 @@ async def test_vault_crud_flow_and_user_isolation():
         assert create_res.status_code == 201
         item_a = create_res.json()
         item_id = item_a["id"]
-        assert item_a["title_encrypted"] == "U2FsdGVkX19TITLE=="
+        assert item_a["encrypted_payload"] == "U2FsdGVkX19SINGLE_ENVELOPE_CIPHERTEXT=="
         assert item_a["is_favorite"] is True
 
         # 3. User A Reads Vault Items
@@ -78,7 +77,7 @@ async def test_vault_crud_flow_and_user_isolation():
             f"/api/v1/vault/items/{item_id}",
             cookies={"access_token": token_b, "csrf_token": csrf_b},
             headers={"X-CSRF-Token": csrf_b},
-            json={"title_encrypted": "ATTACKER_TITLE"}
+            json={"encrypted_payload": "ATTACKER_CIPHERTEXT"}
         )
         assert update_b.status_code == 404
 
@@ -119,11 +118,10 @@ async def test_plaintext_sentinel_leakage():
 
         sentinels = ["TEST_PASSWORD_123", "TEST_CARD_NUMBER_456", "TEST_SECRET_NOTE_789"]
 
-        # Encrypted payload simulation (Base64 ciphertext)
+        # Encrypted single payload simulation (Base64 ciphertext)
         item_payload = {
             "item_type": "login",
-            "title_encrypted": "eyJhY2NvdW50Ijoic2VudGluZWwifQ==",
-            "payload_encrypted": "ZXlKMGIzSmxZVzFsY3lJNkluaHRjM0JsYkhWdWZRPT0=",
+            "encrypted_payload": "ZXlKMGIzSmxZVzFsY3lJNkluaHRjM0JsYkhWdWZRPT0=",
             "nonce": "ZXlKMGIzSmxZVzFsY3lJ==",
             "is_favorite": False
         }
@@ -136,14 +134,16 @@ async def test_plaintext_sentinel_leakage():
         )
         assert create_res.status_code == 201
 
-        # Query raw database table directly
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac_check:
-            items_res = await ac_check.get("/api/v1/vault/items", cookies={"access_token": token})
-            raw_item = items_res.json()[0]
+        # Query raw database table directly via SQLAlchemy session
+        from app.database.session import AsyncSessionLocal
+        from app.models import VaultItem
+        from sqlalchemy.future import select
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(select(VaultItem))
+            db_item = result.scalars().first()
+            assert db_item is not None
 
             for sentinel in sentinels:
-                assert sentinel not in raw_item["title_encrypted"]
-                assert sentinel not in raw_item["payload_encrypted"]
-                assert sentinel not in raw_item["nonce"]
-                assert sentinel not in str(raw_item)
-
+                assert sentinel not in db_item.encrypted_payload
+                assert sentinel not in db_item.nonce

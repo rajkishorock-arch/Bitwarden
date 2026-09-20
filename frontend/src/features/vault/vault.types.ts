@@ -10,8 +10,7 @@ export interface VaultItemEncrypted {
   id: string;
   user_id: string;
   item_type: VaultItemType;
-  title_encrypted: string;
-  payload_encrypted: string;
+  encrypted_payload: string;
   nonce: string;
   is_favorite: boolean;
   created_at: string;

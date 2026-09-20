@@ -54,8 +54,7 @@ class VaultItem(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     item_type = Column(String(50), nullable=False)  # 'login' | 'card' | 'note'
-    title_encrypted = Column(Text, nullable=False)
-    payload_encrypted = Column(Text, nullable=False)
+    encrypted_payload = Column(Text, nullable=False)
     nonce = Column(String(255), nullable=False)
     is_favorite = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utc_now)

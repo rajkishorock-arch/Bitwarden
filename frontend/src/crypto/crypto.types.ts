@@ -34,3 +34,8 @@ export interface NotePayload {
 }
 
 export type VaultPayload = LoginPayload | CardPayload | NotePayload;
+
+export interface VaultItemContent {
+  title: string;
+  payload: VaultPayload;
+}

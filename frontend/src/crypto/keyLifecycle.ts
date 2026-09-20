@@ -6,6 +6,7 @@
 
 import { deriveMasterEncryptionKey } from './kdf';
 import { useCryptoStore } from './key-store';
+import { useVaultStore } from '../features/vault/vault.store';
 import { InvalidPasswordError } from './crypto.errors';
 
 export async function unlockVault(
@@ -34,5 +35,6 @@ export function lockVault(): void {
   const store = useCryptoStore.getState();
   store.setLockState('LOCKING');
   store.lockVault();
+  useVaultStore.getState().clearVaultState();
   store.setLockState('LOCKED');
 }

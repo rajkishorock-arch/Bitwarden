@@ -7,6 +7,13 @@ import type { EncryptedEnvelope } from './crypto.types';
 import { generateNonce, bytesToBase64 } from './nonce';
 import { CryptoError } from './crypto.errors';
 
+function getCrypto(): Crypto {
+  if (typeof window !== 'undefined' && window.crypto) {
+    return window.crypto;
+  }
+  return globalThis.crypto;
+}
+
 export async function encryptVaultPayload<T>(
   data: T,
   key: CryptoKey,
@@ -20,7 +27,7 @@ export async function encryptVaultPayload<T>(
     // Generate fresh 96-bit (12-byte) IV for every encryption operation if not provided
     const iv = customIv || generateNonce(12);
 
-    const ciphertextBuffer = await window.crypto.subtle.encrypt(
+    const ciphertextBuffer = await getCrypto().subtle.encrypt(
       {
         name: 'AES-GCM',
         iv: iv as BufferSource,
@@ -39,12 +46,4 @@ export async function encryptVaultPayload<T>(
   } catch (err: any) {
     throw new CryptoError(`Encryption failed: ${err?.message || 'Unknown Web Crypto error'}`);
   }
-}
-
-export async function encryptString(
-  text: string,
-  key: CryptoKey,
-  customIv?: Uint8Array
-): Promise<EncryptedEnvelope> {
-  return encryptVaultPayload<string>(text, key, customIv);
 }

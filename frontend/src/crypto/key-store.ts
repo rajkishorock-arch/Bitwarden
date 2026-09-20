@@ -6,6 +6,7 @@
 
 import { create } from 'zustand';
 import type { CryptoLockState } from './crypto.types';
+import { useVaultStore } from '../features/vault/vault.store';
 
 interface CryptoState {
   mek: CryptoKey | null;
@@ -42,6 +43,7 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
   },
 
   lockVault: () => {
+    useVaultStore.getState().clearVaultState();
     set({
       mek: null,
       isUnlocked: false,
