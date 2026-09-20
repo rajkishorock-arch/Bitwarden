@@ -22,6 +22,7 @@ import { Input } from '../../../components/ui/Input';
 import { useCryptoStore } from '../../../crypto/key-store';
 import { useVaultStore } from '../vault.store';
 import { VaultItemModal } from '../components/VaultItemModal';
+import { TagChip } from '../../tags/components/TagChip';
 import type { VaultItemDecrypted } from '../vault.types';
 import './VaultPage.css';
 
@@ -72,12 +73,14 @@ export const VaultPage: React.FC = () => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     const payload = item.payload as any;
+    const hasMatchingTag = item.tags && item.tags.some((t) => t.name.toLowerCase().includes(q));
     return (
       item.title.toLowerCase().includes(q) ||
       (payload.username && payload.username.toLowerCase().includes(q)) ||
       (payload.url && payload.url.toLowerCase().includes(q)) ||
       (payload.cardholderName && payload.cardholderName.toLowerCase().includes(q)) ||
-      (payload.content && payload.content.toLowerCase().includes(q))
+      (payload.content && payload.content.toLowerCase().includes(q)) ||
+      hasMatchingTag
     );
   });
 
@@ -229,6 +232,15 @@ export const VaultPage: React.FC = () => {
                 </div>
               </div>
               <div className="detail-actions">
+                <button
+                  type="button"
+                  className={`favorite-btn ${selectedItem.is_favorite ? 'active' : ''}`}
+                  onClick={() => toggleFavorite(selectedItem.id)}
+                  title={selectedItem.is_favorite ? 'Remove from Favorites' : 'Add to Favorites'}
+                  style={{ padding: '6px 10px', display: 'inline-flex', alignItems: 'center' }}
+                >
+                  <Star size={16} />
+                </button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -247,6 +259,14 @@ export const VaultPage: React.FC = () => {
                 </Button>
               </div>
             </div>
+
+            {selectedItem.tags && selectedItem.tags.length > 0 && (
+              <div className="detail-tags-row" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                {selectedItem.tags.map((tag) => (
+                  <TagChip key={tag.id} name={tag.name} color={tag.color} size="sm" />
+                ))}
+              </div>
+            )}
 
             {/* Login Details */}
             {selectedItem.item_type === 'login' && (

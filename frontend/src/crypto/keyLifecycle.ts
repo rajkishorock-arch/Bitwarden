@@ -7,6 +7,7 @@
 import { deriveMasterEncryptionKey } from './kdf';
 import { useCryptoStore } from './key-store';
 import { useVaultStore } from '../features/vault/vault.store';
+import { startAutoLockListener, stopAutoLockListener } from '../features/autolock/autoLock.service';
 import { InvalidPasswordError } from './crypto.errors';
 
 export async function unlockVault(
@@ -24,14 +25,18 @@ export async function unlockVault(
     store.setMasterEncryptionKey(mek);
     store.setLockState('UNLOCKED');
 
+    startAutoLockListener();
+
     return mek;
   } catch (err: any) {
     store.setLockState('LOCKED');
+    stopAutoLockListener();
     throw new InvalidPasswordError('Unable to unlock vault. Check your master password.');
   }
 }
 
 export function lockVault(): void {
+  stopAutoLockListener();
   const store = useCryptoStore.getState();
   store.setLockState('LOCKING');
   store.lockVault();

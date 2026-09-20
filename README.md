@@ -1,29 +1,39 @@
-# VaultGuard - Professional Password Vault Web Application
+# VaultGuard - Zero-Knowledge Password Manager
 
 VaultGuard is a commercial-grade, secure, modern full-stack password-management web application built with a zero-knowledge cryptographic architecture.
 
+## Key Features & Security Architecture
+- **Zero-Knowledge Encryption**: PBKDF2-HMAC-SHA256 (600,000 iterations) key derivation, AES-256-GCM authenticated envelope encryption with fresh 96-bit random IV per item.
+- **Cryptographically Secure Password Generator**: Unbiased rejection sampling via Web Crypto API (`crypto.getRandomValues`). Supports lengths 8-64 with objective entropy scoring.
+- **Local Vault Health Audit**: Local memory analysis for duplicate passwords, weak credentials, and missing fields. Zero remote breach database transmission.
+- **Clipboard Auto-Clear**: 30-second clear timer verifying clipboard content match before clearing.
+- **Auto-Lock Timeout**: Inactivity monitoring (1m, 5m, 10m, 30m, Never) automatically purging memory references on expiry.
+- **Encrypted Import / Export**: Standalone password-protected AES-256-GCM encrypted backup files (`VaultGuardEncryptedBackup`).
+- **Tags & Favorites Management**: Category filtering and metadata tag organization.
+
 ## Tech Stack
-- **Frontend**: React 18, Vite, TypeScript, Lucide Icons, Zustand, React Router
-- **Backend**: FastAPI (Python 3.11+), Pydantic v2, SQLAlchemy 2.0 Async ORM, Argon2id, PyJWT
-- **Database**: SQLite for development, PostgreSQL-ready architecture for production
-- **Security**: Zero-Knowledge Client-Side Key Derivation (Argon2id) & In-Browser AES-256-GCM Encryption
+- **Frontend**: React 19, Vite, TypeScript, Lucide Icons, Zustand, React Router 7
+- **Backend**: FastAPI (Python 3.11+), Pydantic v2, SQLAlchemy 2.0 Async ORM, Alembic Migrations
+- **Database**: SQLite for development, PostgreSQL-ready schema for production
 
 ## Project Structure
 ```text
 Bitwarden/
 ├── backend/            # FastAPI API engine & SQLAlchemy models
+│   ├── alembic/       # Database migration scripts
 │   ├── app/
-│   │   ├── api/v1/    # Versioned API routes (auth, vault, tags, settings, backup)
-│   │   ├── core/      # Security, Argon2id, PyJWT, config
+│   │   ├── api/v1/    # Versioned API routes (auth, vault, tags, settings)
+│   │   ├── core/      # Security, CSRF protection, configuration
 │   │   ├── database/  # Async database session & engine
 │   │   ├── models/    # SQLAlchemy 2.0 ORM models
 │   │   └── schemas/   # Pydantic v2 validation schemas
 │   └── tests/         # Pytest automated test suite
+├── docs/              # System & Cryptographic Architecture docs
 ├── frontend/           # React + Vite + TypeScript web application
-├── crypto.py           # Legacy CLI helper
-├── database.py         # Legacy CLI DB helper
-├── manager.py          # Legacy CLI manager
-├── main.py             # Legacy CLI interface
+│   └── src/
+│       ├── crypto/    # Web Crypto API KDF, AES-GCM, IV utilities
+│       ├── features/  # Feature modules (vault, generator, health, tags, backup, autolock)
+│       └── services/  # API client & clipboard protection
 └── README.md
 ```
 
@@ -31,11 +41,15 @@ Bitwarden/
 
 ### Backend Setup
 ```bash
-# Navigate to backend directory and install dependencies
+# Install dependencies
 pip install -r backend/requirements.txt
 
-# Run backend development server
-PYTHONPATH=backend uvicorn app.main:app --reload --port 8000
+# Run database migrations
+cd backend
+python -m alembic upgrade head
+
+# Run development server
+$env:PYTHONPATH="backend"; uvicorn app.main:app --reload --port 8000
 ```
 
 ### Frontend Setup
@@ -45,19 +59,12 @@ npm install
 npm run dev
 ```
 
-### Database Migrations (Alembic)
+### Running Test Suites
 ```bash
-# Run migrations on local/production database
-cd backend
-python -m alembic upgrade head
+# Backend pytest suite
+$env:PYTHONPATH="backend"; python -m pytest backend/tests
+
+# Frontend Web Crypto security test suite
+cd frontend
+npx tsx src/crypto/__tests__/crypto.test.ts
 ```
-
-### Running Backend Tests
-```bash
-PYTHONPATH=backend python -m pytest backend/tests
-```
-
-## Production Deployment Guide
-
-For detailed step-by-step instructions on deploying the frontend to **Vercel**, the backend to **Render/Railway**, and setting up managed **PostgreSQL**, please refer to [`docs/deployment.md`](file:///c:/Users/rajki/Desktop/coding/password/Bitwarden/docs/deployment.md).
-

@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Activity,
   Settings,
+  Database,
   Star,
   LogOut,
   Search,
@@ -180,6 +181,15 @@ export const AppLayout: React.FC = () => {
             >
               <Activity size={16} />
               <span>Vault Health</span>
+            </NavLink>
+
+            <NavLink
+              to="/app/backup"
+              className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
+              onClick={() => setSidebarOpen(false)}
+            >
+              <Database size={16} />
+              <span>Import / Export</span>
             </NavLink>
 
             <NavLink

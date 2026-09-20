@@ -8,6 +8,10 @@ import { SecurityPage } from '../pages/SecurityPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { RegisterPage } from '../features/auth/pages/RegisterPage';
 import { VaultPage } from '../features/vault/pages/VaultPage';
+import { GeneratorPage } from '../features/generator/pages/GeneratorPage';
+import { HealthPage } from '../features/health/pages/HealthPage';
+import { SettingsPage } from '../features/settings/pages/SettingsPage';
+import { BackupPage } from '../features/backup/pages/BackupPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { authService } from '../features/auth/auth.service';
 import { useAuthStore } from '../features/auth/auth.store';
@@ -35,9 +39,10 @@ const router = createBrowserRouter([
       { path: 'logins', element: <VaultPage /> },
       { path: 'cards', element: <VaultPage /> },
       { path: 'notes', element: <VaultPage /> },
-      { path: 'generator', element: <VaultPage /> },
-      { path: 'health', element: <VaultPage /> },
-      { path: 'settings', element: <VaultPage /> },
+      { path: 'generator', element: <GeneratorPage /> },
+      { path: 'health', element: <HealthPage /> },
+      { path: 'settings', element: <SettingsPage /> },
+      { path: 'backup', element: <BackupPage /> },
     ],
   },
   {

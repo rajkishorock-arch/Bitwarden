@@ -4,6 +4,8 @@ import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
 import { useCryptoStore } from '../../../crypto/key-store';
 import { useVaultStore } from '../vault.store';
+import { TagPicker } from '../../tags/components/TagPicker';
+import { TagManager } from '../../tags/components/TagManager';
 import type { VaultItemType } from '../../../crypto/crypto.types';
 import type { VaultItemDecrypted, CreateVaultItemInput } from '../vault.types';
 import './VaultItemModal.css';
@@ -25,6 +27,8 @@ export const VaultItemModal: React.FC<VaultItemModalProps> = ({
   const [itemType, setItemType] = useState<VaultItemType>('login');
   const [title, setTitle] = useState('');
   const [isFavorite, setIsFavorite] = useState(false);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [tagManagerOpen, setTagManagerOpen] = useState(false);
 
   // Login fields
   const [username, setUsername] = useState('');
@@ -51,6 +55,7 @@ export const VaultItemModal: React.FC<VaultItemModalProps> = ({
       setItemType(initialItem.item_type);
       setTitle(initialItem.title);
       setIsFavorite(initialItem.is_favorite);
+      setSelectedTagIds(initialItem.tags ? initialItem.tags.map((t) => t.id) : []);
 
       if (initialItem.item_type === 'login') {
         const p = initialItem.payload as any;
@@ -79,6 +84,7 @@ export const VaultItemModal: React.FC<VaultItemModalProps> = ({
     setItemType('login');
     setTitle('');
     setIsFavorite(false);
+    setSelectedTagIds([]);
     setUsername('');
     setPassword('');
     setUrl('');
@@ -134,6 +140,7 @@ export const VaultItemModal: React.FC<VaultItemModalProps> = ({
             title,
             payload,
             is_favorite: isFavorite,
+            tag_ids: selectedTagIds,
           },
           mek
         );
@@ -143,6 +150,7 @@ export const VaultItemModal: React.FC<VaultItemModalProps> = ({
           title,
           payload,
           is_favorite: isFavorite,
+          tag_ids: selectedTagIds,
         };
         await createItem(input, mek);
       }
@@ -156,203 +164,213 @@ export const VaultItemModal: React.FC<VaultItemModalProps> = ({
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-container" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>{initialItem ? 'Edit Vault Entry' : 'New Vault Entry'}</h2>
-          <button type="button" className="close-btn" onClick={onClose}>
-            <X size={18} />
-          </button>
-        </div>
-
-        {error && <div className="modal-error-banner">{error}</div>}
-
-        <form onSubmit={handleSubmit} className="modal-form">
-          {/* Item Type Selector */}
-          {!initialItem && (
-            <div className="type-selector">
-              <button
-                type="button"
-                className={`type-btn ${itemType === 'login' ? 'active' : ''}`}
-                onClick={() => setItemType('login')}
-              >
-                <KeyRound size={16} />
-                <span>Login</span>
-              </button>
-              <button
-                type="button"
-                className={`type-btn ${itemType === 'card' ? 'active' : ''}`}
-                onClick={() => setItemType('card')}
-              >
-                <CreditCard size={16} />
-                <span>Card</span>
-              </button>
-              <button
-                type="button"
-                className={`type-btn ${itemType === 'note' ? 'active' : ''}`}
-                onClick={() => setItemType('note')}
-              >
-                <FileText size={16} />
-                <span>Secure Note</span>
-              </button>
-            </div>
-          )}
-
-          <div className="form-group">
-            <label>Title *</label>
-            <Input
-              placeholder="e.g. GitHub Account, Chase Visa, Server Key"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-            />
+    <>
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header">
+            <h2>{initialItem ? 'Edit Vault Entry' : 'New Vault Entry'}</h2>
+            <button type="button" className="close-btn" onClick={onClose}>
+              <X size={18} />
+            </button>
           </div>
 
-          {/* Form Fields by Type */}
-          {itemType === 'login' && (
-            <>
-              <div className="form-group">
-                <label>Username / Email</label>
-                <Input
-                  placeholder="name@example.com"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                />
-              </div>
+          {error && <div className="modal-error-banner">{error}</div>}
 
-              <div className="form-group">
-                <label>Password</label>
-                <Input
-                  type="password"
-                  placeholder="Master password or account password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
+          <form onSubmit={handleSubmit} className="modal-form">
+            {/* Item Type Selector */}
+            {!initialItem && (
+              <div className="type-selector">
+                <button
+                  type="button"
+                  className={`type-btn ${itemType === 'login' ? 'active' : ''}`}
+                  onClick={() => setItemType('login')}
+                >
+                  <KeyRound size={16} />
+                  <span>Login</span>
+                </button>
+                <button
+                  type="button"
+                  className={`type-btn ${itemType === 'card' ? 'active' : ''}`}
+                  onClick={() => setItemType('card')}
+                >
+                  <CreditCard size={16} />
+                  <span>Card</span>
+                </button>
+                <button
+                  type="button"
+                  className={`type-btn ${itemType === 'note' ? 'active' : ''}`}
+                  onClick={() => setItemType('note')}
+                >
+                  <FileText size={16} />
+                  <span>Secure Note</span>
+                </button>
               </div>
+            )}
 
-              <div className="form-group">
-                <label>Website URL</label>
-                <Input
-                  type="url"
-                  placeholder="https://github.com/login"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                />
-              </div>
+            <div className="form-group">
+              <label>Title *</label>
+              <Input
+                placeholder="e.g. GitHub Account, Chase Visa, Server Key"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+              />
+            </div>
 
-              <div className="form-group">
-                <label>Notes</label>
-                <textarea
-                  className="modal-textarea"
-                  rows={3}
-                  placeholder="Additional encrypted notes..."
-                  value={loginNotes}
-                  onChange={(e) => setLoginNotes(e.target.value)}
-                />
-              </div>
-            </>
-          )}
+            {/* Form Fields by Type */}
+            {itemType === 'login' && (
+              <>
+                <div className="form-group">
+                  <label>Username / Email</label>
+                  <Input
+                    placeholder="name@example.com"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                  />
+                </div>
 
-          {itemType === 'card' && (
-            <>
-              <div className="form-group">
-                <label>Cardholder Name</label>
-                <Input
-                  placeholder="John Doe"
-                  value={cardholderName}
-                  onChange={(e) => setCardholderName(e.target.value)}
-                />
-              </div>
+                <div className="form-group">
+                  <label>Password</label>
+                  <Input
+                    type="password"
+                    placeholder="Master password or account password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
 
-              <div className="form-group">
-                <label>Card Number</label>
-                <Input
-                  placeholder="4532 •••• •••• 8910"
-                  value={cardNumber}
-                  onChange={(e) => setCardNumber(e.target.value)}
-                />
-              </div>
+                <div className="form-group">
+                  <label>Website URL</label>
+                  <Input
+                    type="url"
+                    placeholder="https://github.com/login"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                  />
+                </div>
 
-              <div className="form-row">
-                <div className="form-group col-half">
-                  <label>Exp Month / Year</label>
-                  <div className="exp-inputs">
+                <div className="form-group">
+                  <label>Notes</label>
+                  <textarea
+                    className="modal-textarea"
+                    rows={3}
+                    placeholder="Additional encrypted notes..."
+                    value={loginNotes}
+                    onChange={(e) => setLoginNotes(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+
+            {itemType === 'card' && (
+              <>
+                <div className="form-group">
+                  <label>Cardholder Name</label>
+                  <Input
+                    placeholder="John Doe"
+                    value={cardholderName}
+                    onChange={(e) => setCardholderName(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Card Number</label>
+                  <Input
+                    placeholder="4532 •••• •••• 8910"
+                    value={cardNumber}
+                    onChange={(e) => setCardNumber(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group col-half">
+                    <label>Exp Month / Year</label>
+                    <div className="exp-inputs">
+                      <Input
+                        placeholder="MM"
+                        maxLength={2}
+                        value={expMonth}
+                        onChange={(e) => setExpMonth(e.target.value)}
+                      />
+                      <span>/</span>
+                      <Input
+                        placeholder="YYYY"
+                        maxLength={4}
+                        value={expYear}
+                        onChange={(e) => setExpYear(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group col-half">
+                    <label>Security Code (CVV)</label>
                     <Input
-                      placeholder="MM"
-                      maxLength={2}
-                      value={expMonth}
-                      onChange={(e) => setExpMonth(e.target.value)}
-                    />
-                    <span>/</span>
-                    <Input
-                      placeholder="YYYY"
+                      type="password"
                       maxLength={4}
-                      value={expYear}
-                      onChange={(e) => setExpYear(e.target.value)}
+                      placeholder="•••"
+                      value={cvv}
+                      onChange={(e) => setCvv(e.target.value)}
                     />
                   </div>
                 </div>
 
-                <div className="form-group col-half">
-                  <label>Security Code (CVV)</label>
-                  <Input
-                    type="password"
-                    maxLength={4}
-                    placeholder="•••"
-                    value={cvv}
-                    onChange={(e) => setCvv(e.target.value)}
+                <div className="form-group">
+                  <label>Notes</label>
+                  <textarea
+                    className="modal-textarea"
+                    rows={3}
+                    placeholder="Encrypted card notes..."
+                    value={cardNotes}
+                    onChange={(e) => setCardNotes(e.target.value)}
                   />
                 </div>
-              </div>
+              </>
+            )}
 
+            {itemType === 'note' && (
               <div className="form-group">
-                <label>Notes</label>
+                <label>Note Content</label>
                 <textarea
                   className="modal-textarea"
-                  rows={3}
-                  placeholder="Encrypted card notes..."
-                  value={cardNotes}
-                  onChange={(e) => setCardNotes(e.target.value)}
+                  rows={6}
+                  placeholder="Enter sensitive encrypted note contents..."
+                  value={noteContent}
+                  onChange={(e) => setNoteContent(e.target.value)}
+                  required
                 />
               </div>
-            </>
-          )}
+            )}
 
-          {itemType === 'note' && (
-            <div className="form-group">
-              <label>Note Content</label>
-              <textarea
-                className="modal-textarea"
-                rows={6}
-                placeholder="Enter sensitive encrypted note contents..."
-                value={noteContent}
-                onChange={(e) => setNoteContent(e.target.value)}
-                required
-              />
+            <TagPicker
+              selectedTagIds={selectedTagIds}
+              onChange={setSelectedTagIds}
+              onOpenManager={() => setTagManagerOpen(true)}
+            />
+
+            <div className="form-checkbox-row">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={isFavorite}
+                  onChange={(e) => setIsFavorite(e.target.checked)}
+                />
+                <span>Mark as Favorite</span>
+              </label>
             </div>
-          )}
 
-          <div className="form-checkbox-row">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={isFavorite}
-                onChange={(e) => setIsFavorite(e.target.checked)}
-              />
-              <span>Mark as Favorite</span>
-            </label>
-          </div>
-
-          <div className="modal-actions">
-            <Button variant="outline" type="button" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button variant="primary" type="submit" isLoading={isSubmitting}>
-              {initialItem ? 'Save Changes' : 'Encrypt & Save'}
-            </Button>
-          </div>
-        </form>
+            <div className="modal-actions">
+              <Button variant="outline" type="button" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button variant="primary" type="submit" isLoading={isSubmitting}>
+                {initialItem ? 'Save Changes' : 'Encrypt & Save'}
+              </Button>
+            </div>
+          </form>
+        </div>
       </div>
-    </div>
+
+      <TagManager isOpen={tagManagerOpen} onClose={() => setTagManagerOpen(false)} />
+    </>
   );
 };

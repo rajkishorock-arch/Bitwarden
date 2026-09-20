@@ -1,6 +1,7 @@
 /**
- * Comprehensive Web Crypto Cryptographic Test Suite
- * Validates AES-256-GCM single envelope encryption, IV uniqueness, tampering detection, and key mismatch handling.
+ * Comprehensive Web Crypto & Phase 4 Security Test Suite
+ * Validates AES-256-GCM single envelope encryption, IV uniqueness, password generator,
+ * local health analysis, and encrypted backup export/import validation.
  */
 
 import { deriveMasterEncryptionKey } from '../kdf';
@@ -9,10 +10,16 @@ import { decryptVaultPayload } from '../decryption';
 import { DecryptionError, UnsupportedVersionError } from '../crypto.errors';
 import type { EncryptedEnvelope, VaultItemContent } from '../crypto.types';
 
+import { generateSecurePassword, evaluatePasswordStrength } from '../../features/generator/generator.service';
+import { analyzeVaultHealth } from '../../features/health/health.service';
+import { parseAndDecryptBackupFile } from '../../features/backup/backup.service';
+import type { VaultItemDecrypted } from '../../features/vault/vault.types';
+import type { EncryptedBackupContainer } from '../../features/backup/backup.types';
+
 declare const process: any;
 
-async function runCryptoTests() {
-  console.log('=== RUNNING CRYPTOGRAPHIC SECURITY TESTS ===\n');
+async function runSecurityTestSuite() {
+  console.log('=== RUNNING PHASE 4 SECURITY & CRYPTOGRAPHY TEST SUITE ===\n');
   let passed = 0;
   let failed = 0;
 
@@ -178,14 +185,121 @@ async function runCryptoTests() {
     assert(false, `Unsupported version test error: ${err.message}`);
   }
 
+  // Test 8: Password Generator Web Crypto Randomness & Character Groups
+  try {
+    const pass20 = generateSecurePassword({
+      length: 20,
+      uppercase: true,
+      lowercase: true,
+      numbers: true,
+      symbols: true,
+      excludeAmbiguous: false,
+    });
+    assert(pass20.length === 20, 'Password generator produces exact requested length (20)');
+    assert(/[A-Z]/.test(pass20), 'Generated password contains uppercase character');
+    assert(/[a-z]/.test(pass20), 'Generated password contains lowercase character');
+    assert(/[0-9]/.test(pass20), 'Generated password contains number character');
+    assert(/[^a-zA-Z0-9]/.test(pass20), 'Generated password contains symbol character');
+
+    const strength = evaluatePasswordStrength(pass20);
+    assert(strength.entropyBits > 80, '20-character diverse password achieves > 80 bits entropy');
+  } catch (err: any) {
+    assert(false, `Password generator test error: ${err.message}`);
+  }
+
+  // Test 9: Local Vault Health Audit
+  try {
+    const mockItems: VaultItemDecrypted[] = [
+      {
+        id: '1',
+        user_id: 'u1',
+        item_type: 'login',
+        title: 'Service A',
+        payload: { username: 'alice', password: 'SharedPassword123!', url: 'https://a.com' },
+        is_favorite: false,
+        created_at: '',
+        updated_at: '',
+        tags: [],
+      },
+      {
+        id: '2',
+        user_id: 'u1',
+        item_type: 'login',
+        title: 'Service B',
+        payload: { username: 'alice', password: 'SharedPassword123!', url: 'https://b.com' },
+        is_favorite: false,
+        created_at: '',
+        updated_at: '',
+        tags: [],
+      },
+      {
+        id: '3',
+        user_id: 'u1',
+        item_type: 'login',
+        title: 'Service C',
+        payload: { username: '', password: '123', url: '' },
+        is_favorite: false,
+        created_at: '',
+        updated_at: '',
+        tags: [],
+      },
+    ];
+
+    const health = analyzeVaultHealth(mockItems);
+    assert(health.duplicatePasswordCount === 2, 'Vault health correctly identifies 2 reused password instances');
+    assert(health.weakPasswordCount === 1, 'Vault health correctly identifies weak password ("123")');
+    assert(health.missingUsernameCount === 1, 'Vault health correctly flags missing username');
+    assert(health.missingWebsiteCount === 1, 'Vault health correctly flags missing website URL');
+  } catch (err: any) {
+    assert(false, `Vault health test error: ${err.message}`);
+  }
+
+  // Test 10: Encrypted Backup & Import Validation
+  try {
+    const exportPass = 'ExportPassphrase999!';
+    const backupKey = await deriveMasterEncryptionKey(exportPass, 'salt123_backup_domain', 600000);
+
+    const testPayloads = [
+      { item_type: 'login' as const, title: 'Export Item 1', payload: { password: 'Pass1' } },
+    ];
+    const envelope = await encryptVaultPayload(testPayloads, backupKey);
+
+    const container: EncryptedBackupContainer = {
+      version: 1,
+      format: 'VaultGuardEncryptedBackup',
+      kdf: { algorithm: 'PBKDF2-HMAC-SHA256', iterations: 600000, salt: 'salt123' },
+      encryption: { algorithm: 'AES-256-GCM', iv: envelope.iv },
+      ciphertext: envelope.ciphertext,
+    };
+
+    const containerJson = JSON.stringify(container);
+
+    // Decrypt with correct password
+    const result = await parseAndDecryptBackupFile(containerJson, exportPass);
+    assert(result.validItems.length === 1, 'Encrypted backup correctly decrypts and restores valid items');
+
+    // Attempt decrypt with wrong password
+    let caughtWrongPass = false;
+    try {
+      await parseAndDecryptBackupFile(containerJson, 'WrongExportPass123!');
+    } catch (err: any) {
+      if (err.message.includes('Incorrect export password')) {
+        caughtWrongPass = true;
+      }
+    }
+    assert(caughtWrongPass, 'Decrypting backup with wrong password fails with clear security error');
+  } catch (err: any) {
+    assert(false, `Encrypted backup test error: ${err.message}`);
+  }
+
   console.log(`\nResults: ${passed} passed, ${failed} failed.`);
   if (failed > 0 && typeof process !== 'undefined') {
     process.exit(1);
   }
 }
 
-runCryptoTests().catch((err) => {
-  console.error('Fatal error running crypto tests:', err);
+runSecurityTestSuite().catch((err) => {
+  console.error('Fatal error running security tests:', err);
   if (typeof process !== 'undefined') {
     process.exit(1);
   }

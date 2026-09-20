@@ -1,73 +1,96 @@
-import type { DecryptedVaultItem } from '../../types';
+import type { VaultItemDecrypted } from '../vault/vault.types';
+import type { VaultHealthSummary, HealthReportItem } from './health.types';
+import { evaluatePasswordStrength } from '../generator/generator.service';
 
-export interface HealthReport {
-  totalItems: number;
-  weakPasswords: DecryptedVaultItem[];
-  reusedPasswords: DecryptedVaultItem[];
-  oldPasswords: DecryptedVaultItem[];
-  healthScore: number;
-}
+/**
+ * Evaluates vault health locally in memory.
+ * NEVER sends passwords or vault contents to any backend or external server.
+ */
+export function analyzeVaultHealth(items: VaultItemDecrypted[]): VaultHealthSummary {
+  const reportedItemsMap = new Map<string, HealthReportItem>();
 
-export function analyzeVaultHealth(items: DecryptedVaultItem[]): HealthReport {
-  const loginItems = items.filter((item) => item.item_type === 'login');
-  const totalItems = loginItems.length;
+  // 1. Group passwords to identify duplicates
+  const passwordToItemIds = new Map<string, string[]>();
 
-  if (totalItems === 0) {
-    return {
-      totalItems: 0,
-      weakPasswords: [],
-      reusedPasswords: [],
-      oldPasswords: [],
-      healthScore: 100,
-    };
-  }
-
-  const weakPasswords: DecryptedVaultItem[] = [];
-  const oldPasswords: DecryptedVaultItem[] = [];
-  const passwordCounts: Record<string, DecryptedVaultItem[]> = {};
-
-  const now = new Date().getTime();
-  const SIX_MONTHS_MS = 180 * 24 * 60 * 60 * 1000;
-
-  loginItems.forEach((item) => {
-    const password = item.payload.password || '';
-
-    if (password.length < 12 || !/\d/.test(password) || !/[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]/.test(password)) {
-      weakPasswords.push(item);
-    }
-
-    if (password) {
-      if (!passwordCounts[password]) {
-        passwordCounts[password] = [];
+  items.forEach((item) => {
+    if (item.item_type === 'login') {
+      const payload = item.payload as any;
+      if (payload.password) {
+        const existing = passwordToItemIds.get(payload.password) || [];
+        existing.push(item.id);
+        passwordToItemIds.set(payload.password, existing);
       }
-      passwordCounts[password].push(item);
-    }
-
-    const updatedAt = new Date(item.updated_at).getTime();
-    if (now - updatedAt > SIX_MONTHS_MS) {
-      oldPasswords.push(item);
     }
   });
 
-  const reusedItemsSet = new Set<DecryptedVaultItem>();
-  Object.values(passwordCounts).forEach((duplicates) => {
-    if (duplicates.length > 1) {
-      duplicates.forEach((item) => reusedItemsSet.add(item));
+  const duplicateItemIds = new Set<string>();
+  passwordToItemIds.forEach((itemIds) => {
+    if (itemIds.length > 1) {
+      itemIds.forEach((id) => duplicateItemIds.add(id));
     }
   });
-  const reusedPasswords = Array.from(reusedItemsSet);
 
-  const weakDeduction = (weakPasswords.length / totalItems) * 40;
-  const reuseDeduction = (reusedPasswords.length / totalItems) * 40;
-  const oldDeduction = (oldPasswords.length / totalItems) * 20;
+  let duplicatePasswordCount = 0;
+  let weakPasswordCount = 0;
+  let missingUsernameCount = 0;
+  let missingWebsiteCount = 0;
+  let incompleteCardCount = 0;
 
-  const score = Math.max(0, Math.round(100 - (weakDeduction + reuseDeduction + oldDeduction)));
+  items.forEach((item) => {
+    const issues: string[] = [];
+
+    if (item.item_type === 'login') {
+      const payload = item.payload as any;
+
+      if (duplicateItemIds.has(item.id)) {
+        issues.push('Reused / Duplicate Password');
+        duplicatePasswordCount++;
+      }
+
+      if (payload.password) {
+        const strength = evaluatePasswordStrength(payload.password);
+        if (payload.password.length < 12 || strength.entropyBits < 65) {
+          issues.push(`Weak Password (${payload.password.length} chars, ${strength.entropyBits} bits entropy)`);
+          weakPasswordCount++;
+        }
+      } else {
+        issues.push('Missing Password');
+      }
+
+      if (!payload.username) {
+        issues.push('Missing Username or Email');
+        missingUsernameCount++;
+      }
+
+      if (!payload.url) {
+        issues.push('Missing Website URL');
+        missingWebsiteCount++;
+      }
+    } else if (item.item_type === 'card') {
+      const payload = item.payload as any;
+      if (!payload.cardNumber || !payload.expirationMonth || !payload.cvv) {
+        issues.push('Incomplete Payment Card details');
+        incompleteCardCount++;
+      }
+    }
+
+    if (issues.length > 0) {
+      reportedItemsMap.set(item.id, {
+        itemId: item.id,
+        itemTitle: item.title,
+        itemType: item.item_type,
+        issues,
+      });
+    }
+  });
 
   return {
-    totalItems,
-    weakPasswords,
-    reusedPasswords,
-    oldPasswords,
-    healthScore: score,
+    totalItems: items.length,
+    duplicatePasswordCount,
+    weakPasswordCount,
+    missingUsernameCount,
+    missingWebsiteCount,
+    incompleteCardCount,
+    reportedItems: Array.from(reportedItemsMap.values()),
   };
 }

@@ -1,0 +1,176 @@
+.health-page-container {
+  padding: 24px;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.health-page-header {
+  margin-bottom: 24px;
+}
+
+.header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.health-header-icon {
+  color: #38bdf8;
+}
+
+.health-page-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-main, #f8fafc);
+  margin: 0;
+}
+
+.health-page-subtitle {
+  font-size: 0.875rem;
+  color: #94a3b8;
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+.health-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 14px;
+  margin-bottom: 30px;
+}
+
+.summary-stat-card {
+  background-color: var(--surface-bg, #1e293b);
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.stat-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #94a3b8;
+}
+
+.summary-stat-card.warning {
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.summary-stat-card.warning .stat-card-header {
+  color: #f59e0b;
+}
+
+.summary-stat-card.good {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.summary-stat-card.good .stat-card-header {
+  color: #10b981;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text-main, #f8fafc);
+  margin-top: 8px;
+}
+
+.health-report-section h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  margin-bottom: 16px;
+}
+
+.clean-vault-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background-color: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 8px;
+  padding: 20px;
+  color: #a7f3d0;
+}
+
+.clean-icon {
+  color: #10b981;
+  flex-shrink: 0;
+}
+
+.clean-vault-banner h3 {
+  margin: 0 0 4px 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.clean-vault-banner p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #6ee7b7;
+}
+
+.reported-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reported-item-card {
+  background-color: var(--surface-bg, #1e293b);
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 6px;
+  padding: 14px 16px;
+}
+
+.reported-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.reported-item-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-main, #f8fafc);
+}
+
+.inspect-btn {
+  background: transparent;
+  border: none;
+  color: #38bdf8;
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+
+.inspect-btn:hover {
+  text-decoration: underline;
+}
+
+.reported-issues-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.issue-badge {
+  background-color: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  font-size: 0.775rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+}

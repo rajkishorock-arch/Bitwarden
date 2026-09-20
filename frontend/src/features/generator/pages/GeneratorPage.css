@@ -1,0 +1,26 @@
+.generator-page-container {
+  padding: 24px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.generator-page-header {
+  margin-bottom: 24px;
+}
+
+.generator-page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-main, #f8fafc);
+  margin-bottom: 6px;
+}
+
+.generator-page-subtitle {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+.generator-page-content {
+  margin-top: 16px;
+}
