@@ -35,7 +35,7 @@ export const FeaturesPage: React.FC = () => {
             <div className="feature-card">
               <div className="feature-icon"><Clock size={20} /></div>
               <h3>Configurable Auto-Lock</h3>
-              <p>Inactivity monitoring automatically purges decrypted keys and vault items from memory after 1 to 30 minutes.</p>
+              <p>Inactivity monitoring automatically resets in-memory vault state and clears key references on a best-effort basis after 1 to 30 minutes.</p>
             </div>
             <div className="feature-card">
               <div className="feature-icon"><Layers size={20} /></div>

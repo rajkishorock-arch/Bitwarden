@@ -9,15 +9,16 @@ import { CryptoError } from './crypto.errors';
 
 export async function encryptVaultPayload<T>(
   data: T,
-  key: CryptoKey
+  key: CryptoKey,
+  customIv?: Uint8Array
 ): Promise<EncryptedEnvelope> {
   try {
     const encoder = new TextEncoder();
     const jsonString = JSON.stringify(data);
     const plaintextBytes = encoder.encode(jsonString);
 
-    // Generate fresh 96-bit (12-byte) IV for every encryption operation
-    const iv = generateNonce(12);
+    // Generate fresh 96-bit (12-byte) IV for every encryption operation if not provided
+    const iv = customIv || generateNonce(12);
 
     const ciphertextBuffer = await window.crypto.subtle.encrypt(
       {
@@ -42,7 +43,8 @@ export async function encryptVaultPayload<T>(
 
 export async function encryptString(
   text: string,
-  key: CryptoKey
+  key: CryptoKey,
+  customIv?: Uint8Array
 ): Promise<EncryptedEnvelope> {
-  return encryptVaultPayload<string>(text, key);
+  return encryptVaultPayload<string>(text, key, customIv);
 }

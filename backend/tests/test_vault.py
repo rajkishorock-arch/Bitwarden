@@ -101,3 +101,49 @@ async def test_vault_crud_flow_and_user_isolation():
         # 10. Confirm Item Deleted
         list_a_after = await ac.get("/api/v1/vault/items", cookies={"access_token": token_a})
         assert len(list_a_after.json()) == 0
+
+@pytest.mark.asyncio
+async def test_plaintext_sentinel_leakage():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        reg_payload = {
+            "email": "sentinel@example.com",
+            "auth_hash": "sentinel_auth_hash_123456789",
+            "auth_salt": "salt_sentinel",
+            "vault_salt": "vault_salt_sentinel",
+            "kdf_iterations": 600000
+        }
+        await ac.post("/api/v1/auth/register", json=reg_payload)
+        login_res = await ac.post("/api/v1/auth/login", json={"email": "sentinel@example.com", "auth_hash": "sentinel_auth_hash_123456789"})
+        token = login_res.cookies.get("access_token")
+        csrf = login_res.cookies.get("csrf_token")
+
+        sentinels = ["TEST_PASSWORD_123", "TEST_CARD_NUMBER_456", "TEST_SECRET_NOTE_789"]
+
+        # Encrypted payload simulation (Base64 ciphertext)
+        item_payload = {
+            "item_type": "login",
+            "title_encrypted": "eyJhY2NvdW50Ijoic2VudGluZWwifQ==",
+            "payload_encrypted": "ZXlKMGIzSmxZVzFsY3lJNkluaHRjM0JsYkhWdWZRPT0=",
+            "nonce": "ZXlKMGIzSmxZVzFsY3lJ==",
+            "is_favorite": False
+        }
+
+        create_res = await ac.post(
+            "/api/v1/vault/items",
+            cookies={"access_token": token, "csrf_token": csrf},
+            headers={"X-CSRF-Token": csrf},
+            json=item_payload
+        )
+        assert create_res.status_code == 201
+
+        # Query raw database table directly
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac_check:
+            items_res = await ac_check.get("/api/v1/vault/items", cookies={"access_token": token})
+            raw_item = items_res.json()[0]
+
+            for sentinel in sentinels:
+                assert sentinel not in raw_item["title_encrypted"]
+                assert sentinel not in raw_item["payload_encrypted"]
+                assert sentinel not in raw_item["nonce"]
+                assert sentinel not in str(raw_item)
+

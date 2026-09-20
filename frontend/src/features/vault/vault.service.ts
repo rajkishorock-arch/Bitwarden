@@ -10,6 +10,7 @@ import {
   encryptVaultPayload,
   decryptString,
   decryptVaultPayload,
+  generateNonce,
 } from '../../crypto';
 import type { EncryptedEnvelope } from '../../crypto';
 import type {
@@ -72,11 +73,12 @@ export const vaultService = {
     input: CreateVaultItemInput,
     key: CryptoKey
   ): Promise<VaultItemDecrypted> {
-    // Encrypt title & payload using fresh 96-bit IV
-    const encryptedTitle = await encryptString(input.title, key);
-    const encryptedPayload = await encryptVaultPayload(input.payload, key);
+    // Generate a single fresh 96-bit IV for this item operation
+    const itemIv = generateNonce(12);
 
-    // Both title and payload use the same fresh nonce/iv per item creation
+    const encryptedTitle = await encryptString(input.title, key, itemIv);
+    const encryptedPayload = await encryptVaultPayload(input.payload, key, itemIv);
+
     const payload = {
       item_type: input.item_type,
       title_encrypted: encryptedTitle.ciphertext,
@@ -122,10 +124,11 @@ export const vaultService = {
     }
 
     if (input.title !== undefined || input.payload !== undefined) {
-      // Re-encrypt updated title or payload using fresh IV
+      // Generate a fresh 96-bit IV for this update operation
+      const itemIv = generateNonce(12);
       const titleToEncrypt = input.title || '';
-      const encryptedTitle = await encryptString(titleToEncrypt, key);
-      const encryptedPayload = await encryptVaultPayload(input.payload, key);
+      const encryptedTitle = await encryptString(titleToEncrypt, key, itemIv);
+      const encryptedPayload = await encryptVaultPayload(input.payload, key, itemIv);
 
       payloadToBackend.title_encrypted = encryptedTitle.ciphertext;
       payloadToBackend.payload_encrypted = encryptedPayload.ciphertext;
