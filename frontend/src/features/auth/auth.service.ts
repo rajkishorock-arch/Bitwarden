@@ -1,5 +1,5 @@
 import { apiClient } from '../../services/api-client';
-import { deriveAccountAuthKey, deriveMasterEncryptionKey, generateRandomSalt } from '../../crypto/kdf';
+import { deriveAccountAuthKey, generateRandomSalt } from '../../crypto/kdf';
 import { useAuthStore } from './auth.store';
 import { useCryptoStore } from '../../crypto/key-store';
 import type { RegisterPayload, LoginPayload, UserProfile, AuthResponse } from './auth.types';
@@ -10,6 +10,7 @@ export const authService = {
     const vaultSaltHex = generateRandomSalt(16);
     const kdfIterations = 600000;
 
+    // Derive Account Auth Key for server registration
     const authHash = await deriveAccountAuthKey(masterPasswordStr, authSaltHex, kdfIterations);
 
     const userProfile = await apiClient.post<UserProfile>('/auth/register', {
@@ -20,14 +21,14 @@ export const authService = {
       kdf_iterations: kdfIterations,
     });
 
-    const loginRes = await apiClient.post<AuthResponse>('/auth/login', {
+    // Login session (Backend sets HTTP-Only Cookie)
+    await apiClient.post<AuthResponse>('/auth/login', {
       email,
       auth_hash: authHash,
     });
 
-    localStorage.setItem('access_token', loginRes.access_token);
-
     useAuthStore.getState().setUser(userProfile);
+    // Vault remains LOCKED after login (No MEK derived in Phase 2)
     useCryptoStore.getState().lockVault();
 
     return userProfile;
@@ -47,8 +48,6 @@ export const authService = {
       throw new Error(err.message || 'Failed to authenticate with server.');
     });
 
-    localStorage.setItem('access_token', tokenRes.access_token);
-
     const userProfile: UserProfile = {
       id: tokenRes.user_id,
       email: tokenRes.email,
@@ -59,32 +58,22 @@ export const authService = {
     };
 
     useAuthStore.getState().setUser(userProfile);
+    // Vault remains LOCKED after login (No MEK derived in Phase 2)
     useCryptoStore.getState().lockVault();
 
     return userProfile;
   },
 
-  async unlockVault(masterPasswordStr: string): Promise<boolean> {
+  async unlockVault(_masterPasswordStr: string): Promise<boolean> {
     const user = useAuthStore.getState().user;
     if (!user) throw new Error('No active user account session.');
 
-    const mek = await deriveMasterEncryptionKey(
-      masterPasswordStr,
-      user.vault_salt,
-      user.kdf_iterations
-    );
-
-    useCryptoStore.getState().setMasterEncryptionKey(mek);
+    // Phase 2 UI State Shell: Confirms user session is active.
+    // Actual Web Crypto AES-256-GCM vault decryption engine belongs to Phase 3.
     return true;
   },
 
   async restoreSession(): Promise<boolean> {
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      useAuthStore.getState().logout();
-      return false;
-    }
-
     try {
       const userProfile = await apiClient.get<UserProfile>('/auth/me');
       useAuthStore.getState().setUser(userProfile);
@@ -98,7 +87,7 @@ export const authService = {
 
   async logout(): Promise<void> {
     try {
-      await apiClient.post('/auth/logout', {});
+      await apiClient.post('/auth/logout');
     } catch (_) {}
     useAuthStore.getState().logout();
     useCryptoStore.getState().lockVault();
