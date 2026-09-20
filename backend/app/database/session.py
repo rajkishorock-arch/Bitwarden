@@ -4,20 +4,27 @@ from app.core.config import settings
 
 Base = declarative_base()
 
-db_url = (settings.DATABASE_URL or "").strip().strip("'").strip('"')
-if not db_url or db_url == "DATABASE_URL":
-    db_url = "sqlite+aiosqlite:///./vault.db"
-elif db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
-elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+asyncpg://"):
-    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+def create_safe_async_engine():
+    db_url = settings.DATABASE_URL
+    connect_args = {"check_same_thread": False} if "sqlite" in db_url else {}
+    try:
+        return create_async_engine(
+            db_url,
+            echo=False,
+            future=True,
+            connect_args=connect_args
+        )
+    except Exception as err:
+        print(f"[WARNING] Async engine creation failed for '{db_url}': {err}. Falling back to default SQLite.")
+        fallback_url = "sqlite+aiosqlite:///./vault.db"
+        return create_async_engine(
+            fallback_url,
+            echo=False,
+            future=True,
+            connect_args={"check_same_thread": False}
+        )
 
-engine = create_async_engine(
-    db_url,
-    echo=False,
-    future=True,
-    connect_args={"check_same_thread": False} if "sqlite" in db_url else {}
-)
+engine = create_safe_async_engine()
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
@@ -28,8 +35,11 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except Exception as err:
+        print(f"[WARNING] init_db schema initialization notice: {err}")
 
 async def get_db():
     async with AsyncSessionLocal() as session:

@@ -39,10 +39,19 @@ class Settings(BaseSettings):
         if not cleaned or cleaned.upper() == "DATABASE_URL":
             return "sqlite+aiosqlite:///./vault.db"
         if cleaned.startswith("postgres://"):
-            return cleaned.replace("postgres://", "postgresql+asyncpg://", 1)
+            cleaned = cleaned.replace("postgres://", "postgresql+asyncpg://", 1)
         elif cleaned.startswith("postgresql://") and not cleaned.startswith("postgresql+asyncpg://"):
-            return cleaned.replace("postgresql://", "postgresql+asyncpg://", 1)
-        return cleaned
+            cleaned = cleaned.replace("postgresql://", "postgresql+asyncpg://", 1)
+        elif cleaned.startswith("sqlite://") and not cleaned.startswith("sqlite+aiosqlite://"):
+            cleaned = cleaned.replace("sqlite://", "sqlite+aiosqlite://", 1)
+
+        try:
+            from sqlalchemy.engine.url import make_url
+            make_url(cleaned)
+            return cleaned
+        except Exception as err:
+            print(f"[WARNING] Invalid DATABASE_URL '{v}': {err}. Falling back to default SQLite.")
+            return "sqlite+aiosqlite:///./vault.db"
 
     @field_validator("CORS_ORIGINS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
