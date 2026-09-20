@@ -4,7 +4,15 @@
  * Zero token storage in localStorage or sessionStorage.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
+function getApiBaseUrl(): string {
+  const raw = import.meta.env.VITE_API_URL;
+  if (!raw) return '/api/v1';
+  const trimmed = raw.replace(/\/+$/, '');
+  if (trimmed.endsWith('/api/v1')) return trimmed;
+  return `${trimmed}/api/v1`;
+}
+
+const API_BASE_URL = getApiBaseUrl();
 
 export class APIError extends Error {
   status: number;
