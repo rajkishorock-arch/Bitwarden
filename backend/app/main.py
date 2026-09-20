@@ -10,7 +10,10 @@ from app.api.v1.api import api_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup DB initialization
+    masked_db = settings.DATABASE_URL.split('@')[-1] if '@' in settings.DATABASE_URL else settings.DATABASE_URL
+    print(f"[STARTUP] Initializing database engine: {masked_db}")
     await init_db()
+    print("[STARTUP] Database initialization complete.")
     yield
 
 app = FastAPI(

@@ -31,6 +31,19 @@ class Settings(BaseSettings):
         # Secure=True is mandatory when SameSite=none in production.
         return self.ENVIRONMENT.lower() == "production"
 
+    @field_validator("DATABASE_URL", mode="before")
+    def assemble_database_url(cls, v: Union[str, None]) -> str:
+        if not v or not isinstance(v, str):
+            return "sqlite+aiosqlite:///./vault.db"
+        cleaned = v.strip().strip("'").strip('"')
+        if not cleaned or cleaned.upper() == "DATABASE_URL":
+            return "sqlite+aiosqlite:///./vault.db"
+        if cleaned.startswith("postgres://"):
+            return cleaned.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif cleaned.startswith("postgresql://") and not cleaned.startswith("postgresql+asyncpg://"):
+            return cleaned.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return cleaned
+
     @field_validator("CORS_ORIGINS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
         if isinstance(v, str) and not v.startswith("["):
