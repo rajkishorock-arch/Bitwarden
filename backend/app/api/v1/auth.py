@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.core.config import settings
+from app.core.csrf import generate_csrf_token, set_csrf_cookie, CSRF_COOKIE_NAME
 from app.database.session import get_db
 from app.models import User, UserSettings
 from app.schemas.auth import UserRegisterRequest, UserLoginRequest, TokenResponse, UserResponse
@@ -58,17 +60,23 @@ async def login(
         )
 
     access_token = create_access_token(subject=user.id)
+    csrf_token = generate_csrf_token()
 
     response.set_cookie(
         key="access_token",
         value=access_token,
         httponly=True,
-        samesite="lax",
-        secure=False
+        samesite=settings.COOKIE_SAMESITE,
+        secure=settings.COOKIE_SECURE,
+        path="/",
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     )
+
+    set_csrf_cookie(response, csrf_token)
 
     return TokenResponse(
         access_token=access_token,
+        csrf_token=csrf_token,
         user_id=user.id,
         email=user.email,
         auth_salt=user.auth_salt,
@@ -78,7 +86,18 @@ async def login(
 
 @router.post("/logout")
 async def logout(response: Response, current_user: User = Depends(get_current_user)):
-    response.delete_cookie(key="access_token")
+    response.delete_cookie(
+        key="access_token",
+        path="/",
+        samesite=settings.COOKIE_SAMESITE,
+        secure=settings.COOKIE_SECURE
+    )
+    response.delete_cookie(
+        key=CSRF_COOKIE_NAME,
+        path="/",
+        samesite=settings.COOKIE_SAMESITE,
+        secure=settings.COOKIE_SECURE
+    )
     return {"message": "Successfully logged out"}
 
 @router.get("/me", response_model=UserResponse)

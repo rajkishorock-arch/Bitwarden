@@ -17,6 +17,12 @@ export class APIError extends Error {
   }
 }
 
+function getCsrfToken(): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(^| )csrf_token=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+}
+
 async function request<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -25,6 +31,14 @@ async function request<T>(
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
+
+  const method = (options.method || 'GET').toUpperCase();
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    const csrfToken = getCsrfToken();
+    if (csrfToken) {
+      headers['X-CSRF-Token'] = csrfToken;
+    }
+  }
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,

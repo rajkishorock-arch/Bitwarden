@@ -15,6 +15,7 @@ class UserLoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
+    csrf_token: Optional[str] = None
     token_type: str = "bearer"
     user_id: str
     email: str

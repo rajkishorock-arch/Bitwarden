@@ -53,7 +53,7 @@ async def test_register_duplicate_email():
         assert "already exists" in res2.json()["detail"]
 
 @pytest.mark.asyncio
-async def test_login_successful_and_cookie_set():
+async def test_login_successful_and_cookies_set():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         reg_payload = {
             "email": "bob@example.com",
@@ -72,8 +72,10 @@ async def test_login_successful_and_cookie_set():
         assert response.status_code == 200
         token_data = response.json()
         assert "access_token" in token_data
+        assert "csrf_token" in token_data
         assert token_data["email"] == "bob@example.com"
         assert "access_token" in response.cookies
+        assert "csrf_token" in response.cookies
 
 @pytest.mark.asyncio
 async def test_login_invalid_credentials():
@@ -96,7 +98,7 @@ async def test_login_invalid_credentials():
         assert "Invalid email or authentication key" in response.json()["detail"]
 
 @pytest.mark.asyncio
-async def test_authenticated_get_me():
+async def test_authenticated_get_me_via_cookie():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         reg_payload = {
             "email": "dave@example.com",
@@ -106,13 +108,14 @@ async def test_authenticated_get_me():
             "kdf_iterations": 600000
         }
         res_reg = await ac.post("/api/v1/auth/register", json=reg_payload)
-        assert res_reg.status_code == 201, res_reg.text
+        assert res_reg.status_code == 201
 
         login_res = await ac.post("/api/v1/auth/login", json={"email": "dave@example.com", "auth_hash": "dave_secret_auth_hash_123456"})
-        assert login_res.status_code == 200, login_res.text
-        token = login_res.json()["access_token"]
+        assert login_res.status_code == 200
+        access_token = login_res.cookies.get("access_token")
 
-        response = await ac.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+        # Request using access_token cookie
+        response = await ac.get("/api/v1/auth/me", cookies={"access_token": access_token})
         assert response.status_code == 200
         user_data = response.json()
         assert user_data["email"] == "dave@example.com"
@@ -134,12 +137,61 @@ async def test_logout_clears_session():
             "kdf_iterations": 600000
         }
         res_reg = await ac.post("/api/v1/auth/register", json=reg_payload)
-        assert res_reg.status_code == 201, res_reg.text
+        assert res_reg.status_code == 201
 
         login_res = await ac.post("/api/v1/auth/login", json={"email": "eve@example.com", "auth_hash": "eve_secret_auth_hash_123456"})
-        assert login_res.status_code == 200, login_res.text
-        token = login_res.json()["access_token"]
+        assert login_res.status_code == 200
+        access_token = login_res.cookies.get("access_token")
+        csrf_token = login_res.cookies.get("csrf_token")
 
-        logout_res = await ac.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {token}"})
+        logout_res = await ac.post(
+            "/api/v1/auth/logout",
+            cookies={"access_token": access_token, "csrf_token": csrf_token},
+            headers={"X-CSRF-Token": csrf_token}
+        )
         assert logout_res.status_code == 200
         assert logout_res.json()["message"] == "Successfully logged out"
+
+@pytest.mark.asyncio
+async def test_csrf_protection_state_changing_request():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        reg_payload = {
+            "email": "csrf_test@example.com",
+            "auth_hash": "csrf_secret_auth_hash_123456",
+            "auth_salt": "auth_salt",
+            "vault_salt": "vault_salt",
+            "kdf_iterations": 600000
+        }
+        await ac.post("/api/v1/auth/register", json=reg_payload)
+
+        login_res = await ac.post("/api/v1/auth/login", json={"email": "csrf_test@example.com", "auth_hash": "csrf_secret_auth_hash_123456"})
+        access_token = login_res.cookies.get("access_token")
+        csrf_token = login_res.cookies.get("csrf_token")
+
+        # 1. State-changing request WITHOUT CSRF header -> must be rejected (403)
+        bad_logout = await ac.post("/api/v1/auth/logout", cookies={"access_token": access_token})
+        assert bad_logout.status_code == 403
+        assert "CSRF token validation failed" in bad_logout.json()["detail"]
+
+        # 2. State-changing request WITH valid CSRF header -> must succeed (200)
+        good_logout = await ac.post(
+            "/api/v1/auth/logout",
+            cookies={"access_token": access_token, "csrf_token": csrf_token},
+            headers={"X-CSRF-Token": csrf_token}
+        )
+        assert good_logout.status_code == 200
+
+@pytest.mark.asyncio
+async def test_cors_headers():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.options(
+            "/api/v1/auth/login",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "POST"
+            }
+        )
+        assert response.status_code == 200
+        assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"
+        assert response.headers.get("access-control-allow-credentials") == "true"
+

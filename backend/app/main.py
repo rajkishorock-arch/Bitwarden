@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
+from app.core.csrf import CSRFMiddleware
 from app.database.session import init_db
 from app.api.v1.api import api_router
 
@@ -17,6 +18,8 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     lifespan=lifespan
 )
+
+app.add_middleware(CSRFMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
