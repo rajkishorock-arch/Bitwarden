@@ -274,7 +274,7 @@ async function runSecurityTestSuite() {
 
     const containerJson = JSON.stringify(container);
 
-    // Decrypt with correct password
+    // Decrypt with correct password (roundtrip)
     const result = await parseAndDecryptBackupFile(containerJson, exportPass);
     assert(result.validItems.length === 1, 'Encrypted backup correctly decrypts and restores valid items');
 
@@ -288,6 +288,93 @@ async function runSecurityTestSuite() {
       }
     }
     assert(caughtWrongPass, 'Decrypting backup with wrong password fails with clear security error');
+
+    // Tampered ciphertext in backup container
+    const tamperedContainerCiphertext = {
+      ...container,
+      ciphertext: container.ciphertext.slice(0, -2) + 'AA',
+    };
+    let caughtTamperedCiphertext = false;
+    try {
+      await parseAndDecryptBackupFile(JSON.stringify(tamperedContainerCiphertext), exportPass);
+    } catch (err: any) {
+      if (err.message.includes('Incorrect export password or corrupted backup file')) {
+        caughtTamperedCiphertext = true;
+      }
+    }
+    assert(caughtTamperedCiphertext, 'Tampered ciphertext in backup fails decryption check');
+
+    // Tampered IV in backup container
+    const tamperedContainerIv = {
+      ...container,
+      encryption: { algorithm: 'AES-256-GCM', iv: container.encryption.iv.slice(0, -2) + 'BB' },
+    };
+    let caughtTamperedIv = false;
+    try {
+      await parseAndDecryptBackupFile(JSON.stringify(tamperedContainerIv), exportPass);
+    } catch (err: any) {
+      if (err.message.includes('Incorrect export password or corrupted backup file')) {
+        caughtTamperedIv = true;
+      }
+    }
+    assert(caughtTamperedIv, 'Tampered IV in backup fails decryption check');
+
+    // Tampered salt in backup container
+    const tamperedContainerSalt = {
+      ...container,
+      kdf: { ...container.kdf, salt: 'tampered_salt_999' },
+    };
+    let caughtTamperedSalt = false;
+    try {
+      await parseAndDecryptBackupFile(JSON.stringify(tamperedContainerSalt), exportPass);
+    } catch (err: any) {
+      if (err.message.includes('Incorrect export password or corrupted backup file')) {
+        caughtTamperedSalt = true;
+      }
+    }
+    assert(caughtTamperedSalt, 'Tampered KDF salt in backup fails decryption check');
+
+    // Malformed backup (invalid JSON)
+    let caughtMalformedJson = false;
+    try {
+      await parseAndDecryptBackupFile('{ invalid_json_syntax: true ', exportPass);
+    } catch (err: any) {
+      if (err.message.includes('Invalid file format')) {
+        caughtMalformedJson = true;
+      }
+    }
+    assert(caughtMalformedJson, 'Malformed non-JSON backup string fails with format error');
+
+    // Unsupported backup version
+    const unsupportedVersionContainer = { ...container, version: 99 };
+    let caughtUnsupportedVersion = false;
+    try {
+      await parseAndDecryptBackupFile(JSON.stringify(unsupportedVersionContainer), exportPass);
+    } catch (err: any) {
+      if (err.message.includes('Unsupported backup format version')) {
+        caughtUnsupportedVersion = true;
+      }
+    }
+    assert(caughtUnsupportedVersion, 'Unsupported backup version fails with version error');
+
+    // Plaintext sentinel check in encrypted backup file content
+    const sentinelPassword = 'SENTINEL_BACKUP_SECRET_PASS_2026';
+    const sentinelPayloads = [
+      { item_type: 'login' as const, title: 'Sentinel Item', payload: { password: sentinelPassword } },
+    ];
+    const sentinelEnvelope = await encryptVaultPayload(sentinelPayloads, backupKey);
+    const sentinelContainer: EncryptedBackupContainer = {
+      version: 1,
+      format: 'VaultGuardEncryptedBackup',
+      kdf: { algorithm: 'PBKDF2-HMAC-SHA256', iterations: 600000, salt: 'salt123' },
+      encryption: { algorithm: 'AES-256-GCM', iv: sentinelEnvelope.iv },
+      ciphertext: sentinelEnvelope.ciphertext,
+    };
+    const sentinelJsonString = JSON.stringify(sentinelContainer);
+    assert(
+      !sentinelJsonString.includes(sentinelPassword),
+      'Plaintext sentinel password does not appear in exported encrypted backup file JSON string'
+    );
   } catch (err: any) {
     assert(false, `Encrypted backup test error: ${err.message}`);
   }
