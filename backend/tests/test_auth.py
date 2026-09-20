@@ -168,18 +168,60 @@ async def test_csrf_protection_state_changing_request():
         access_token = login_res.cookies.get("access_token")
         csrf_token = login_res.cookies.get("csrf_token")
 
-        # 1. State-changing request WITHOUT CSRF header -> must be rejected (403)
-        bad_logout = await ac.post("/api/v1/auth/logout", cookies={"access_token": access_token})
-        assert bad_logout.status_code == 403
-        assert "CSRF token validation failed" in bad_logout.json()["detail"]
+        # 1. GET requests succeed without CSRF token
+        get_res = await ac.get("/api/v1/auth/me", cookies={"access_token": access_token})
+        assert get_res.status_code == 200
 
-        # 2. State-changing request WITH valid CSRF header -> must succeed (200)
+        # 2. State-changing request WITHOUT CSRF token -> rejected (403)
+        bad_logout_no_header = await ac.post("/api/v1/auth/logout", cookies={"access_token": access_token})
+        assert bad_logout_no_header.status_code == 403
+        assert "CSRF token validation failed" in bad_logout_no_header.json()["detail"]
+
+        # 3. State-changing request WITH INVALID CSRF token -> rejected (403)
+        bad_logout_wrong_token = await ac.post(
+            "/api/v1/auth/logout",
+            cookies={"access_token": access_token, "csrf_token": csrf_token},
+            headers={"X-CSRF-Token": "INVALID_CSRF_TOKEN_STRING"}
+        )
+        assert bad_logout_wrong_token.status_code == 403
+        assert "CSRF token validation failed" in bad_logout_wrong_token.json()["detail"]
+
+        # 4. State-changing request WITH VALID CSRF token -> succeeds (200)
         good_logout = await ac.post(
             "/api/v1/auth/logout",
             cookies={"access_token": access_token, "csrf_token": csrf_token},
             headers={"X-CSRF-Token": csrf_token}
         )
         assert good_logout.status_code == 200
+
+@pytest.mark.asyncio
+async def test_csrf_protection_put_patch_delete_methods():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        reg_payload = {
+            "email": "csrf_methods@example.com",
+            "auth_hash": "csrf_secret_auth_hash_123456",
+            "auth_salt": "auth_salt",
+            "vault_salt": "vault_salt",
+            "kdf_iterations": 600000
+        }
+        await ac.post("/api/v1/auth/register", json=reg_payload)
+
+        login_res = await ac.post("/api/v1/auth/login", json={"email": "csrf_methods@example.com", "auth_hash": "csrf_secret_auth_hash_123456"})
+        access_token = login_res.cookies.get("access_token")
+        csrf_token = login_res.cookies.get("csrf_token")
+
+        # PUT without CSRF -> 403
+        put_res = await ac.put("/api/v1/settings", cookies={"access_token": access_token}, json={"auto_lock_minutes": 10})
+        assert put_res.status_code == 403
+
+        # PUT with valid CSRF -> succeeds (200)
+        put_good = await ac.put(
+            "/api/v1/settings",
+            cookies={"access_token": access_token, "csrf_token": csrf_token},
+            headers={"X-CSRF-Token": csrf_token},
+            json={"auto_lock_minutes": 10}
+        )
+        assert put_good.status_code == 200
 
 @pytest.mark.asyncio
 async def test_cors_headers():

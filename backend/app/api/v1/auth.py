@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -101,5 +101,12 @@ async def logout(response: Response, current_user: User = Depends(get_current_us
     return {"message": "Successfully logged out"}
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(current_user: User = Depends(get_current_user)):
+async def get_me(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user)
+):
+    if not request.cookies.get(CSRF_COOKIE_NAME):
+        csrf_token = generate_csrf_token()
+        set_csrf_cookie(response, csrf_token)
     return current_user

@@ -39,6 +39,23 @@ export const AppLayout: React.FC = () => {
     }
   }, [isAuthenticated, isInitialized, navigate]);
 
+  useEffect(() => {
+    // Dynamically enforce noindex on private app routes
+    let metaRobots = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
+    if (!metaRobots) {
+      metaRobots = document.createElement('meta');
+      metaRobots.name = 'robots';
+      document.head.appendChild(metaRobots);
+    }
+    metaRobots.content = 'noindex, nofollow';
+
+    return () => {
+      if (metaRobots) {
+        metaRobots.content = 'index, follow';
+      }
+    };
+  }, []);
+
   if (!isAuthenticated) {
     return null;
   }
