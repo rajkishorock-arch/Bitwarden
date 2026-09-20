@@ -3,7 +3,8 @@ export type ItemType = 'login' | 'card' | 'note';
 export interface User {
   id: string;
   email: string;
-  kdf_salt: string;
+  auth_salt: string;
+  vault_salt: string;
   kdf_iterations: number;
   created_at: string;
 }

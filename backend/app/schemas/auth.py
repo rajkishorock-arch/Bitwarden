@@ -5,7 +5,8 @@ from datetime import datetime
 class UserRegisterRequest(BaseModel):
     email: EmailStr
     auth_hash: str = Field(..., min_length=16, description="Client-side derived auth key hash")
-    kdf_salt: str = Field(..., description="Base64 or hex salt used for KDF")
+    auth_salt: str = Field(..., description="Base64/hex salt used for account auth KDF")
+    vault_salt: str = Field(..., description="Base64/hex salt used for vault encryption KDF")
     kdf_iterations: int = Field(default=600000, ge=100000)
 
 class UserLoginRequest(BaseModel):
@@ -17,7 +18,8 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     user_id: str
     email: str
-    kdf_salt: str
+    auth_salt: str
+    vault_salt: str
     kdf_iterations: int
 
 class UserResponse(BaseModel):
@@ -25,6 +27,7 @@ class UserResponse(BaseModel):
 
     id: str
     email: str
-    kdf_salt: str
+    auth_salt: str
+    vault_salt: str
     kdf_iterations: int
     created_at: datetime

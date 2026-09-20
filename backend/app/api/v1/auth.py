@@ -15,7 +15,6 @@ async def register(
     req: UserRegisterRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    # Check if user with email already exists
     result = await db.execute(select(User).where(User.email == req.email.lower()))
     if result.scalars().first():
         raise HTTPException(
@@ -23,19 +22,18 @@ async def register(
             detail="An account with this email address already exists."
         )
 
-    # Hash the auth credentials
     hashed_auth = get_password_hash(req.auth_hash)
 
     user = User(
         email=req.email.lower(),
         auth_hash=hashed_auth,
-        kdf_salt=req.kdf_salt,
+        auth_salt=req.auth_salt,
+        vault_salt=req.vault_salt,
         kdf_iterations=req.kdf_iterations
     )
     db.add(user)
     await db.flush()
 
-    # Create default user settings
     settings_obj = UserSettings(user_id=user.id)
     db.add(settings_obj)
 
@@ -61,20 +59,20 @@ async def login(
 
     access_token = create_access_token(subject=user.id)
 
-    # Set HTTP-only cookie
     response.set_cookie(
         key="access_token",
         value=access_token,
         httponly=True,
         samesite="lax",
-        secure=False  # Set True in production with HTTPS
+        secure=False
     )
 
     return TokenResponse(
         access_token=access_token,
         user_id=user.id,
         email=user.email,
-        kdf_salt=user.kdf_salt,
+        auth_salt=user.auth_salt,
+        vault_salt=user.vault_salt,
         kdf_iterations=user.kdf_iterations
     )
 

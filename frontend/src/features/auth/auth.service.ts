@@ -16,16 +16,18 @@ export interface LoginPayload {
 
 export const authService = {
   async register({ email, masterPasswordStr }: RegisterPayload): Promise<User> {
-    const kdfSaltHex = generateRandomSalt(16);
+    const authSaltHex = generateRandomSalt(16);
+    const vaultSaltHex = generateRandomSalt(16);
     const kdfIterations = 600000;
 
-    const authHash = await deriveAccountAuthKey(masterPasswordStr, kdfSaltHex, kdfIterations);
-    const mek = await deriveMasterEncryptionKey(masterPasswordStr, kdfSaltHex, kdfIterations);
+    const authHash = await deriveAccountAuthKey(masterPasswordStr, authSaltHex, kdfIterations);
+    const mek = await deriveMasterEncryptionKey(masterPasswordStr, vaultSaltHex, kdfIterations);
 
     const user = await apiClient.post<User>('/auth/register', {
       email,
       auth_hash: authHash,
-      kdf_salt: kdfSaltHex,
+      auth_salt: authSaltHex,
+      vault_salt: vaultSaltHex,
       kdf_iterations: kdfIterations,
     });
 
@@ -49,7 +51,8 @@ export const authService = {
       access_token: string;
       user_id: string;
       email: string;
-      kdf_salt: string;
+      auth_salt: string;
+      vault_salt: string;
       kdf_iterations: number;
     }>('/auth/login', {
       email,
@@ -66,14 +69,15 @@ export const authService = {
     const user: User = {
       id: tokenRes.user_id,
       email: tokenRes.email,
-      kdf_salt: tokenRes.kdf_salt,
+      auth_salt: tokenRes.auth_salt,
+      vault_salt: tokenRes.vault_salt,
       kdf_iterations: tokenRes.kdf_iterations,
       created_at: new Date().toISOString(),
     };
 
     const mek = await deriveMasterEncryptionKey(
       masterPasswordStr,
-      tokenRes.kdf_salt,
+      tokenRes.vault_salt,
       tokenRes.kdf_iterations
     );
 
@@ -89,7 +93,7 @@ export const authService = {
 
     const mek = await deriveMasterEncryptionKey(
       masterPasswordStr,
-      user.kdf_salt,
+      user.vault_salt,
       user.kdf_iterations
     );
 

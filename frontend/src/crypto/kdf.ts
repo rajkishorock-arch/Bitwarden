@@ -1,6 +1,6 @@
 /**
  * Client-Side Key Derivation Engine (Web Crypto API)
- * Zero-Knowledge Architecture: Derives separate Account Auth Key and Master Encryption Key.
+ * Zero-Knowledge Architecture: Derives separate Account Auth Key and Master Encryption Key (MEK).
  */
 
 function bytesToHex(bytes: Uint8Array): string {
@@ -17,16 +17,16 @@ export function generateRandomSalt(lengthBytes = 16): string {
 
 /**
  * Derives Account Auth Hash (Sent to server for authentication).
- * Uses PBKDF2-HMAC-SHA256 with "vaultguard_auth_salt" modifier.
+ * Uses PBKDF2-HMAC-SHA256 with user's public auth_salt.
  */
 export async function deriveAccountAuthKey(
   passwordStr: string,
-  saltHex: string,
+  authSaltHex: string,
   iterations = 600000
 ): Promise<string> {
   const encoder = new TextEncoder();
   const passwordBytes = encoder.encode(passwordStr);
-  const saltBytes = encoder.encode(saltHex + "_auth");
+  const saltBytes = encoder.encode(authSaltHex + "_auth_domain");
 
   const baseKey = await window.crypto.subtle.importKey(
     'raw',
@@ -52,16 +52,16 @@ export async function deriveAccountAuthKey(
 
 /**
  * Derives Master Encryption Key (MEK) for AES-256-GCM.
- * Held ONLY in browser memory while vault is unlocked.
+ * Held ONLY in browser memory while vault is unlocked. Never sent to backend.
  */
 export async function deriveMasterEncryptionKey(
   passwordStr: string,
-  saltHex: string,
+  vaultSaltHex: string,
   iterations = 600000
 ): Promise<CryptoKey> {
   const encoder = new TextEncoder();
   const passwordBytes = encoder.encode(passwordStr);
-  const saltBytes = encoder.encode(saltHex + "_enc");
+  const saltBytes = encoder.encode(vaultSaltHex + "_vault_domain");
 
   const baseKey = await window.crypto.subtle.importKey(
     'raw',
