@@ -1,0 +1,13 @@
+# VaultGuard SEO & Crawler Instructions
+User-agent: *
+Allow: /
+Allow: /features
+Allow: /security
+Allow: /login
+Allow: /register
+
+# Disallow indexing for all private vault application routes
+Disallow: /app/
+Disallow: /app/*
+
+Sitemap: https://vaultguard.vercel.app/sitemap.xml

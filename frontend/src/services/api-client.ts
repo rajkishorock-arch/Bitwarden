@@ -29,7 +29,7 @@ async function request<T>(
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers,
-    credentials: 'same-origin', // Include HTTP-Only session cookie
+    credentials: 'include', // Send & receive HTTP-Only session cookie across cross-domain requests
   });
 
   if (!response.ok) {

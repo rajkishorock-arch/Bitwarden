@@ -45,7 +45,19 @@ npm install
 npm run dev
 ```
 
+### Database Migrations (Alembic)
+```bash
+# Run migrations on local/production database
+cd backend
+python -m alembic upgrade head
+```
+
 ### Running Backend Tests
 ```bash
 PYTHONPATH=backend python -m pytest backend/tests
 ```
+
+## Production Deployment Guide
+
+For detailed step-by-step instructions on deploying the frontend to **Vercel**, the backend to **Render/Railway**, and setting up managed **PostgreSQL**, please refer to [`docs/deployment.md`](file:///c:/Users/rajki/Desktop/coding/password/Bitwarden/docs/deployment.md).
+
