@@ -9,6 +9,13 @@ class UserRegisterRequest(BaseModel):
     vault_salt: str = Field(..., description="Base64/hex salt used for vault encryption KDF")
     kdf_iterations: int = Field(default=600000, ge=100000)
 
+class PreloginRequest(BaseModel):
+    email: EmailStr
+
+class PreloginResponse(BaseModel):
+    auth_salt: str
+    kdf_iterations: int = 600000
+
 class UserLoginRequest(BaseModel):
     email: EmailStr
     auth_hash: str

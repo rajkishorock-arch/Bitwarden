@@ -17,7 +17,7 @@ export function generateRandomSalt(lengthBytes = 16): string {
 
 /**
  * Derives Account Auth Hash (Sent to server for authentication).
- * Uses PBKDF2-HMAC-SHA256 with user's public auth_salt.
+ * Uses PBKDF2-HMAC-SHA256 with user's public auth_salt and domain separation.
  */
 export async function deriveAccountAuthKey(
   passwordStr: string,
@@ -26,7 +26,7 @@ export async function deriveAccountAuthKey(
 ): Promise<string> {
   const encoder = new TextEncoder();
   const passwordBytes = encoder.encode(passwordStr);
-  const saltBytes = encoder.encode(authSaltHex + "_auth_domain");
+  const saltBytes = encoder.encode(authSaltHex + '_auth_domain');
 
   const baseKey = await window.crypto.subtle.importKey(
     'raw',
@@ -52,7 +52,8 @@ export async function deriveAccountAuthKey(
 
 /**
  * Derives Master Encryption Key (MEK) for AES-256-GCM.
- * Held ONLY in browser memory while vault is unlocked. Never sent to backend.
+ * Held ONLY in browser memory while vault is unlocked.
+ * Non-extractable (extractable = false) to prevent exporting key bytes from JS memory.
  */
 export async function deriveMasterEncryptionKey(
   passwordStr: string,
@@ -61,7 +62,7 @@ export async function deriveMasterEncryptionKey(
 ): Promise<CryptoKey> {
   const encoder = new TextEncoder();
   const passwordBytes = encoder.encode(passwordStr);
-  const saltBytes = encoder.encode(vaultSaltHex + "_vault_domain");
+  const saltBytes = encoder.encode(vaultSaltHex + '_vault_domain');
 
   const baseKey = await window.crypto.subtle.importKey(
     'raw',
@@ -80,7 +81,7 @@ export async function deriveMasterEncryptionKey(
     },
     baseKey,
     { name: 'AES-GCM', length: 256 },
-    false, // extractable = false (Prevents dumping key from JS memory)
+    false, // extractable = false (Non-extractable key)
     ['encrypt', 'decrypt']
   );
 

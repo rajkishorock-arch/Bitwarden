@@ -1,137 +1,174 @@
+/**
+ * Encrypted Vault Service Client
+ * Handles API communication with FastAPI backend.
+ * Ensures ALL items are encrypted before sending over HTTP and decrypted in memory upon receipt.
+ */
+
 import { apiClient } from '../../services/api-client';
-import { encryptVaultPayload, decryptVaultPayload } from '../../crypto/aes-gcm';
-import { useCryptoStore } from '../../crypto/key-store';
+import {
+  encryptString,
+  encryptVaultPayload,
+  decryptString,
+  decryptVaultPayload,
+} from '../../crypto';
+import type { EncryptedEnvelope } from '../../crypto';
 import type {
-  RawVaultItemResponse,
-  DecryptedVaultItem,
-  ItemType,
-  DecryptedPayload,
-} from '../../types';
+  VaultItemEncrypted,
+  VaultItemDecrypted,
+  CreateVaultItemInput,
+  UpdateVaultItemInput,
+} from './vault.types';
+import type { VaultPayload } from '../../crypto/crypto.types';
 
 export const vaultService = {
-  async fetchItems(): Promise<DecryptedVaultItem[]> {
-    const mek = useCryptoStore.getState().mek;
-    if (!mek) throw new Error('Vault is locked. Decryption key unavailable.');
-
-    const rawItems = await apiClient.get<RawVaultItemResponse[]>('/vault/items');
+  /**
+   * Fetches encrypted vault items from backend and decrypts them in memory using MEK.
+   */
+  async fetchVaultItems(key: CryptoKey): Promise<VaultItemDecrypted[]> {
+    const encryptedItems = await apiClient.get<VaultItemEncrypted[]>('/vault/items');
 
     const decryptedItems = await Promise.all(
-      rawItems.map(async (raw) => {
-        try {
-          const title = await decryptVaultPayload<string>(raw.title_encrypted, raw.nonce, mek);
-          const payload = await decryptVaultPayload<DecryptedPayload>(raw.payload_encrypted, raw.nonce, mek);
+      encryptedItems.map(async (item) => {
+        // Construct envelope for title
+        const titleEnvelope: EncryptedEnvelope = {
+          version: 1,
+          algorithm: 'AES-256-GCM',
+          iv: item.nonce,
+          ciphertext: item.title_encrypted,
+        };
 
-          return {
-            id: raw.id,
-            user_id: raw.user_id,
-            item_type: raw.item_type,
-            title,
-            payload,
-            nonce: raw.nonce,
-            is_favorite: raw.is_favorite,
-            created_at: raw.created_at,
-            updated_at: raw.updated_at,
-            tags: raw.tags || [],
-          } as DecryptedVaultItem;
-        } catch (err) {
-          console.error(`Failed to decrypt vault item ${raw.id}:`, err);
-          return {
-            id: raw.id,
-            user_id: raw.user_id,
-            item_type: raw.item_type,
-            title: '[Decryption Error]',
-            payload: {},
-            nonce: raw.nonce,
-            is_favorite: raw.is_favorite,
-            created_at: raw.created_at,
-            updated_at: raw.updated_at,
-            tags: [],
-          } as DecryptedVaultItem;
-        }
+        // Construct envelope for payload
+        const payloadEnvelope: EncryptedEnvelope = {
+          version: 1,
+          algorithm: 'AES-256-GCM',
+          iv: item.nonce,
+          ciphertext: item.payload_encrypted,
+        };
+
+        const title = await decryptString(titleEnvelope, key);
+        const payload = await decryptVaultPayload<VaultPayload>(payloadEnvelope, key);
+
+        return {
+          id: item.id,
+          user_id: item.user_id,
+          item_type: item.item_type,
+          title,
+          payload,
+          is_favorite: item.is_favorite,
+          created_at: item.created_at,
+          updated_at: item.updated_at,
+          tags: item.tags || [],
+        };
       })
     );
 
     return decryptedItems;
   },
 
-  async createItem(
-    itemType: ItemType,
-    titleStr: string,
-    payloadData: DecryptedPayload,
-    isFavorite = false,
-    tagIds: string[] = []
-  ): Promise<DecryptedVaultItem> {
-    const mek = useCryptoStore.getState().mek;
-    if (!mek) throw new Error('Vault is locked.');
+  /**
+   * Encrypts plaintext title and payload client-side before posting to backend.
+   */
+  async createVaultItem(
+    input: CreateVaultItemInput,
+    key: CryptoKey
+  ): Promise<VaultItemDecrypted> {
+    // Encrypt title & payload using fresh 96-bit IV
+    const encryptedTitle = await encryptString(input.title, key);
+    const encryptedPayload = await encryptVaultPayload(input.payload, key);
 
-    const encryptedTitle = await encryptVaultPayload(titleStr, mek);
-    const encryptedPayload = await encryptVaultPayload(payloadData, mek);
+    // Both title and payload use the same fresh nonce/iv per item creation
+    const payload = {
+      item_type: input.item_type,
+      title_encrypted: encryptedTitle.ciphertext,
+      payload_encrypted: encryptedPayload.ciphertext,
+      nonce: encryptedTitle.iv,
+      is_favorite: input.is_favorite || false,
+      tag_ids: input.tag_ids || [],
+    };
 
-    const rawCreated = await apiClient.post<RawVaultItemResponse>('/vault/items', {
-      item_type: itemType,
-      title_encrypted: encryptedTitle.ciphertextBase64,
-      payload_encrypted: encryptedPayload.ciphertextBase64,
-      nonce: encryptedTitle.nonceBase64,
-      is_favorite: isFavorite,
-      tag_ids: tagIds,
-    });
+    const itemEncrypted = await apiClient.post<VaultItemEncrypted>('/vault/items', payload);
 
     return {
-      id: rawCreated.id,
-      user_id: rawCreated.user_id,
-      item_type: rawCreated.item_type,
-      title: titleStr,
-      payload: payloadData,
-      nonce: rawCreated.nonce,
-      is_favorite: rawCreated.is_favorite,
-      created_at: rawCreated.created_at,
-      updated_at: rawCreated.updated_at,
-      tags: rawCreated.tags || [],
+      id: itemEncrypted.id,
+      user_id: itemEncrypted.user_id,
+      item_type: itemEncrypted.item_type,
+      title: input.title,
+      payload: input.payload,
+      is_favorite: itemEncrypted.is_favorite,
+      created_at: itemEncrypted.created_at,
+      updated_at: itemEncrypted.updated_at,
+      tags: itemEncrypted.tags || [],
     };
   },
 
-  async updateItem(
+  /**
+   * Encrypts updated plaintext title & payload client-side before sending to backend.
+   */
+  async updateVaultItem(
     id: string,
-    itemType: ItemType,
-    titleStr: string,
-    payloadData: DecryptedPayload,
-    isFavorite: boolean,
-    tagIds: string[]
-  ): Promise<DecryptedVaultItem> {
-    const mek = useCryptoStore.getState().mek;
-    if (!mek) throw new Error('Vault is locked.');
+    input: UpdateVaultItemInput,
+    key: CryptoKey
+  ): Promise<VaultItemDecrypted> {
+    const payloadToBackend: Record<string, any> = {};
 
-    const encryptedTitle = await encryptVaultPayload(titleStr, mek);
-    const encryptedPayload = await encryptVaultPayload(payloadData, mek);
+    if (input.item_type !== undefined) {
+      payloadToBackend.item_type = input.item_type;
+    }
+    if (input.is_favorite !== undefined) {
+      payloadToBackend.is_favorite = input.is_favorite;
+    }
+    if (input.tag_ids !== undefined) {
+      payloadToBackend.tag_ids = input.tag_ids;
+    }
 
-    const rawUpdated = await apiClient.put<RawVaultItemResponse>(`/vault/items/${id}`, {
-      item_type: itemType,
-      title_encrypted: encryptedTitle.ciphertextBase64,
-      payload_encrypted: encryptedPayload.ciphertextBase64,
-      nonce: encryptedTitle.nonceBase64,
-      is_favorite: isFavorite,
-      tag_ids: tagIds,
-    });
+    if (input.title !== undefined || input.payload !== undefined) {
+      // Re-encrypt updated title or payload using fresh IV
+      const titleToEncrypt = input.title || '';
+      const encryptedTitle = await encryptString(titleToEncrypt, key);
+      const encryptedPayload = await encryptVaultPayload(input.payload, key);
+
+      payloadToBackend.title_encrypted = encryptedTitle.ciphertext;
+      payloadToBackend.payload_encrypted = encryptedPayload.ciphertext;
+      payloadToBackend.nonce = encryptedTitle.iv;
+    }
+
+    const itemEncrypted = await apiClient.put<VaultItemEncrypted>(`/vault/items/${id}`, payloadToBackend);
+
+    // Decrypt response to ensure state accuracy
+    const titleEnvelope: EncryptedEnvelope = {
+      version: 1,
+      algorithm: 'AES-256-GCM',
+      iv: itemEncrypted.nonce,
+      ciphertext: itemEncrypted.title_encrypted,
+    };
+    const payloadEnvelope: EncryptedEnvelope = {
+      version: 1,
+      algorithm: 'AES-256-GCM',
+      iv: itemEncrypted.nonce,
+      ciphertext: itemEncrypted.payload_encrypted,
+    };
+
+    const title = await decryptString(titleEnvelope, key);
+    const payload = await decryptVaultPayload<VaultPayload>(payloadEnvelope, key);
 
     return {
-      id: rawUpdated.id,
-      user_id: rawUpdated.user_id,
-      item_type: rawUpdated.item_type,
-      title: titleStr,
-      payload: payloadData,
-      nonce: rawUpdated.nonce,
-      is_favorite: rawUpdated.is_favorite,
-      created_at: rawUpdated.created_at,
-      updated_at: rawUpdated.updated_at,
-      tags: rawUpdated.tags || [],
+      id: itemEncrypted.id,
+      user_id: itemEncrypted.user_id,
+      item_type: itemEncrypted.item_type,
+      title,
+      payload,
+      is_favorite: itemEncrypted.is_favorite,
+      created_at: itemEncrypted.created_at,
+      updated_at: itemEncrypted.updated_at,
+      tags: itemEncrypted.tags || [],
     };
   },
 
-  async deleteItem(id: string): Promise<void> {
+  async deleteVaultItem(id: string): Promise<void> {
     await apiClient.delete(`/vault/items/${id}`);
   },
 
-  async toggleFavorite(id: string): Promise<RawVaultItemResponse> {
-    return apiClient.patch<RawVaultItemResponse>(`/vault/items/${id}/favorite`);
+  async toggleFavorite(id: string): Promise<VaultItemEncrypted> {
+    return apiClient.patch<VaultItemEncrypted>(`/vault/items/${id}/favorite`);
   },
 };

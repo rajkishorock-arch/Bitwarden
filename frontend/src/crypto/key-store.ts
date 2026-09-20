@@ -1,16 +1,21 @@
 /**
- * In-Memory Key Store & Lock Manager
- * The Master Encryption Key resides ONLY in memory and is NEVER saved to storage.
+ * In-Memory Key Store & Lock State Manager
+ * The Master Encryption Key (MEK) resides ONLY in application RAM while unlocked.
+ * Zero persistent storage (no localStorage, sessionStorage, or IndexedDB).
  */
 
 import { create } from 'zustand';
+import type { CryptoLockState } from './crypto.types';
 
 interface CryptoState {
   mek: CryptoKey | null;
+  lockState: CryptoLockState;
   isUnlocked: boolean;
   autoLockMinutes: number;
   lastActivityTimestamp: number;
+
   setMasterEncryptionKey: (key: CryptoKey) => void;
+  setLockState: (state: CryptoLockState) => void;
   lockVault: () => void;
   updateActivity: () => void;
   setAutoLockMinutes: (minutes: number) => void;
@@ -18,6 +23,7 @@ interface CryptoState {
 
 export const useCryptoStore = create<CryptoState>((set, get) => ({
   mek: null,
+  lockState: 'LOCKED',
   isUnlocked: false,
   autoLockMinutes: 5,
   lastActivityTimestamp: Date.now(),
@@ -26,14 +32,20 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
     set({
       mek: key,
       isUnlocked: true,
+      lockState: 'UNLOCKED',
       lastActivityTimestamp: Date.now(),
     });
+  },
+
+  setLockState: (state: CryptoLockState) => {
+    set({ lockState: state });
   },
 
   lockVault: () => {
     set({
       mek: null,
       isUnlocked: false,
+      lockState: 'LOCKED',
     });
   },
 

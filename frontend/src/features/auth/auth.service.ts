@@ -1,8 +1,14 @@
 import { apiClient } from '../../services/api-client';
 import { deriveAccountAuthKey, generateRandomSalt } from '../../crypto/kdf';
+import { unlockVault as cryptoUnlockVault, lockVault as cryptoLockVault } from '../../crypto/keyLifecycle';
 import { useAuthStore } from './auth.store';
-import { useCryptoStore } from '../../crypto/key-store';
+import { useVaultStore } from '../vault/vault.store';
 import type { RegisterPayload, LoginPayload, UserProfile, AuthResponse } from './auth.types';
+
+interface PreloginResponse {
+  auth_salt: string;
+  kdf_iterations: number;
+}
 
 export const authService = {
   async register({ email, masterPasswordStr }: RegisterPayload): Promise<UserProfile> {
@@ -28,25 +34,37 @@ export const authService = {
     });
 
     useAuthStore.getState().setUser(userProfile);
-    // Vault remains LOCKED after login (No MEK derived in Phase 2)
-    useCryptoStore.getState().lockVault();
+
+    // Automatically derive MEK and unlock vault upon registration
+    const mek = await cryptoUnlockVault(masterPasswordStr, userProfile.vault_salt, userProfile.kdf_iterations);
+    await useVaultStore.getState().fetchItems(mek);
 
     return userProfile;
   },
 
   async login({ email, masterPasswordStr }: LoginPayload): Promise<UserProfile> {
-    const mockSaltHex = generateRandomSalt(16);
-    const authHashTemp = await deriveAccountAuthKey(masterPasswordStr, mockSaltHex, 600000);
+    // 1. Fetch user's auth_salt via prelogin
+    const preloginRes = await apiClient.post<PreloginResponse>('/auth/prelogin', { email });
 
-    const tokenRes = await apiClient.post<AuthResponse>('/auth/login', {
-      email,
-      auth_hash: authHashTemp,
-    }).catch((err) => {
-      if (err.status === 401) {
-        throw new Error('Invalid email address or master password.');
-      }
-      throw new Error(err.message || 'Failed to authenticate with server.');
-    });
+    // 2. Derive Account Auth Key using user's actual auth_salt
+    const authHash = await deriveAccountAuthKey(
+      masterPasswordStr,
+      preloginRes.auth_salt,
+      preloginRes.kdf_iterations || 600000
+    );
+
+    // 3. Authenticate with server
+    const tokenRes = await apiClient
+      .post<AuthResponse>('/auth/login', {
+        email,
+        auth_hash: authHash,
+      })
+      .catch((err) => {
+        if (err.status === 401) {
+          throw new Error('Invalid email address or master password.');
+        }
+        throw new Error(err.message || 'Failed to authenticate with server.');
+      });
 
     const userProfile: UserProfile = {
       id: tokenRes.user_id,
@@ -58,18 +76,20 @@ export const authService = {
     };
 
     useAuthStore.getState().setUser(userProfile);
-    // Vault remains LOCKED after login (No MEK derived in Phase 2)
-    useCryptoStore.getState().lockVault();
+
+    // 4. Derive MEK and unlock vault in memory
+    const mek = await cryptoUnlockVault(masterPasswordStr, userProfile.vault_salt, userProfile.kdf_iterations);
+    await useVaultStore.getState().fetchItems(mek);
 
     return userProfile;
   },
 
-  async unlockVault(_masterPasswordStr: string): Promise<boolean> {
+  async unlockVault(masterPasswordStr: string): Promise<boolean> {
     const user = useAuthStore.getState().user;
     if (!user) throw new Error('No active user account session.');
 
-    // Phase 2 UI State Shell: Confirms user session is active.
-    // Actual Web Crypto AES-256-GCM vault decryption engine belongs to Phase 3.
+    const mek = await cryptoUnlockVault(masterPasswordStr, user.vault_salt, user.kdf_iterations);
+    await useVaultStore.getState().fetchItems(mek);
     return true;
   },
 
@@ -80,7 +100,8 @@ export const authService = {
       return true;
     } catch (_) {
       useAuthStore.getState().logout();
-      useCryptoStore.getState().lockVault();
+      cryptoLockVault();
+      useVaultStore.getState().clearVaultState();
       return false;
     }
   },
@@ -89,7 +110,9 @@ export const authService = {
     try {
       await apiClient.post('/auth/logout');
     } catch (_) {}
+
+    cryptoLockVault();
+    useVaultStore.getState().clearVaultState();
     useAuthStore.getState().logout();
-    useCryptoStore.getState().lockVault();
   },
 };

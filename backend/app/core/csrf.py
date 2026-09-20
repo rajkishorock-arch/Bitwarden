@@ -10,6 +10,7 @@ CSRF_HEADER_NAME = "X-CSRF-Token"
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 EXEMPT_PATHS = {
     "/health",
+    f"{settings.API_V1_STR}/auth/prelogin",
     f"{settings.API_V1_STR}/auth/login",
     f"{settings.API_V1_STR}/auth/register",
     f"{settings.API_V1_STR}/openapi.json",

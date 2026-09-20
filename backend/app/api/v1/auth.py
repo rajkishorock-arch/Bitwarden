@@ -6,11 +6,34 @@ from app.core.config import settings
 from app.core.csrf import generate_csrf_token, set_csrf_cookie, CSRF_COOKIE_NAME
 from app.database.session import get_db
 from app.models import User, UserSettings
-from app.schemas.auth import UserRegisterRequest, UserLoginRequest, TokenResponse, UserResponse
+from app.schemas.auth import UserRegisterRequest, UserLoginRequest, PreloginRequest, PreloginResponse, TokenResponse, UserResponse
+
+import hashlib
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+@router.post("/prelogin", response_model=PreloginResponse)
+async def prelogin(
+    req: PreloginRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(User).where(User.email == req.email.lower()))
+    user = result.scalars().first()
+
+    if user:
+        return PreloginResponse(
+            auth_salt=user.auth_salt,
+            kdf_iterations=user.kdf_iterations
+        )
+
+    # Return deterministic dummy salt if user not found to prevent user enumeration
+    dummy_salt = hashlib.sha256((req.email.lower() + "_vaultguard_dummy_salt_seed").encode()).hexdigest()[:32]
+    return PreloginResponse(
+        auth_salt=dummy_salt,
+        kdf_iterations=600000
+    )
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(

@@ -1,64 +1,128 @@
+/**
+ * In-Memory Vault Store
+ * Holds decrypted vault records strictly in RAM while unlocked.
+ * Zero persistence middleware (no localStorage/sessionStorage).
+ */
+
 import { create } from 'zustand';
-import type { DecryptedVaultItem } from '../../types';
+import type {
+  VaultItemDecrypted,
+  CreateVaultItemInput,
+  UpdateVaultItemInput,
+} from './vault.types';
 import { vaultService } from './vault.service';
 
-interface VaultState {
-  items: DecryptedVaultItem[];
-  selectedItemId: string | null;
-  searchQuery: string;
-  categoryFilter: 'all' | 'favorites' | 'login' | 'card' | 'note';
-  selectedTagId: string | null;
+export type CategoryFilter = 'all' | 'favorites' | 'logins' | 'cards' | 'notes';
+
+interface VaultStoreState {
+  items: VaultItemDecrypted[];
   isLoading: boolean;
   error: string | null;
+  activeCategory: CategoryFilter;
+  searchQuery: string;
+  selectedItemId: string | null;
 
-  fetchItems: () => Promise<void>;
-  selectItem: (id: string | null) => void;
+  setActiveCategory: (category: CategoryFilter) => void;
   setSearchQuery: (query: string) => void;
-  setCategoryFilter: (category: 'all' | 'favorites' | 'login' | 'card' | 'note') => void;
-  setSelectedTagId: (tagId: string | null) => void;
-  addItem: (item: DecryptedVaultItem) => void;
-  removeItem: (id: string) => void;
-  updateItemInStore: (item: DecryptedVaultItem) => void;
+  setSelectedItemId: (id: string | null) => void;
+
+  fetchItems: (key: CryptoKey) => Promise<void>;
+  createItem: (input: CreateVaultItemInput, key: CryptoKey) => Promise<VaultItemDecrypted>;
+  updateItem: (id: string, input: UpdateVaultItemInput, key: CryptoKey) => Promise<VaultItemDecrypted>;
+  deleteItem: (id: string) => Promise<void>;
+  toggleFavorite: (id: string) => Promise<void>;
+
+  clearVaultState: () => void;
 }
 
-export const useVaultStore = create<VaultState>((set) => ({
+export const useVaultStore = create<VaultStoreState>((set) => ({
   items: [],
-  selectedItemId: null,
-  searchQuery: '',
-  categoryFilter: 'all',
-  selectedTagId: null,
   isLoading: false,
   error: null,
+  activeCategory: 'all',
+  searchQuery: '',
+  selectedItemId: null,
 
-  fetchItems: async () => {
+  setActiveCategory: (category) => set({ activeCategory: category }),
+  setSearchQuery: (query) => set({ searchQuery: query }),
+  setSelectedItemId: (id) => set({ selectedItemId: id }),
+
+  fetchItems: async (key: CryptoKey) => {
     set({ isLoading: true, error: null });
     try {
-      const items = await vaultService.fetchItems();
+      const items = await vaultService.fetchVaultItems(key);
       set({ items, isLoading: false });
     } catch (err: any) {
-      set({ error: err.message || 'Failed to load vault items', isLoading: false });
+      set({ error: err?.message || 'Failed to fetch vault items.', isLoading: false });
     }
   },
 
-  selectItem: (id: string | null) => set({ selectedItemId: id }),
-  setSearchQuery: (query: string) => set({ searchQuery: query }),
-  setCategoryFilter: (category) => set({ categoryFilter: category, selectedTagId: null }),
-  setSelectedTagId: (tagId) => set({ selectedTagId: tagId }),
-
-  addItem: (item) => {
-    set((state) => ({ items: [item, ...state.items], selectedItemId: item.id }));
+  createItem: async (input: CreateVaultItemInput, key: CryptoKey) => {
+    set({ isLoading: true, error: null });
+    try {
+      const newItem = await vaultService.createVaultItem(input, key);
+      set((state) => ({
+        items: [newItem, ...state.items],
+        isLoading: false,
+      }));
+      return newItem;
+    } catch (err: any) {
+      set({ error: err?.message || 'Failed to create vault item.', isLoading: false });
+      throw err;
+    }
   },
 
-  removeItem: (id) => {
-    set((state) => ({
-      items: state.items.filter((i) => i.id !== id),
-      selectedItemId: state.selectedItemId === id ? null : state.selectedItemId,
-    }));
+  updateItem: async (id: string, input: UpdateVaultItemInput, key: CryptoKey) => {
+    set({ isLoading: true, error: null });
+    try {
+      const updatedItem = await vaultService.updateVaultItem(id, input, key);
+      set((state) => ({
+        items: state.items.map((item) => (item.id === id ? updatedItem : item)),
+        isLoading: false,
+      }));
+      return updatedItem;
+    } catch (err: any) {
+      set({ error: err?.message || 'Failed to update vault item.', isLoading: false });
+      throw err;
+    }
   },
 
-  updateItemInStore: (updatedItem) => {
-    set((state) => ({
-      items: state.items.map((i) => (i.id === updatedItem.id ? updatedItem : i)),
-    }));
+  deleteItem: async (id: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      await vaultService.deleteVaultItem(id);
+      set((state) => ({
+        items: state.items.filter((item) => item.id !== id),
+        selectedItemId: state.selectedItemId === id ? null : state.selectedItemId,
+        isLoading: false,
+      }));
+    } catch (err: any) {
+      set({ error: err?.message || 'Failed to delete vault item.', isLoading: false });
+      throw err;
+    }
+  },
+
+  toggleFavorite: async (id: string) => {
+    try {
+      await vaultService.toggleFavorite(id);
+      set((state) => ({
+        items: state.items.map((item) =>
+          item.id === id ? { ...item, is_favorite: !item.is_favorite } : item
+        ),
+      }));
+    } catch (err: any) {
+      set({ error: err?.message || 'Failed to toggle favorite.' });
+    }
+  },
+
+  clearVaultState: () => {
+    set({
+      items: [],
+      isLoading: false,
+      error: null,
+      selectedItemId: null,
+      searchQuery: '',
+      activeCategory: 'all',
+    });
   },
 }));
