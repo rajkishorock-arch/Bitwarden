@@ -1,0 +1,36 @@
+# Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+backend/.venv/
+backend/vault.db
+vault.db
+.pytest_cache/
+.coverage
+htmlcov/
+*.sqlite3
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+.DS_Store
+*.log
+
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+
+# IDE / Gemini / OS
+.vscode/
+.idea/
+*.swp
+*.swo
